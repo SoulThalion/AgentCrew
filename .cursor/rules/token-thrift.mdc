@@ -1,0 +1,39 @@
+---
+description: Ahorro de tokens en Cursor — menos contexto, menos vueltas, parar al hecho
+alwaysApply: true
+---
+
+# Token thrift
+
+Objetivo: alargar el plan de Cursor. Caveman = salida corta. Esto = **menos input y menos trabajo inútil**.
+
+## Lectura / herramientas
+
+- Preferir `Grep` / `Glob` / `Read` con `offset`/`limit` frente a volcar árboles o archivos enormes.
+- No re-leer `docs/` o rules ya cargados en el turno salvo duda real.
+- No volcar diffs enteros al chat; citar rutas y rangos cortos.
+- Skills grandes (`nestjs-best-practices`, `modern-web-guidance`, security): leer **solo** la sección/regla del caso, no el pack entero.
+
+## Alcance del trabajo
+
+- Un to-do / un outcome estrecho. Sin “ya de paso” (refactor, rename, docs extra).
+- Skills: `lean-build` (MVP del pedido), `surgical-patch` (bugs), `verify-and-stop` (probar y parar).
+- QA: modelo barato (`qa-todo-gate`); no re-probar lo ya pasado sin cambio.
+
+## Respuestas
+
+- Caveman ES activo. Sin repetir el enunciado del usuario.
+- No pegar bloques largos de docs: enlazar `docs/…`.
+- Commits: skill `caveman-commit` si piden mensaje/commit.
+
+## Docs / memoria
+
+- Mantener `docs/estado.md` y roadmap cortos y al día (punteros, no ensayos).
+- Si un `.md` de contexto crece mucho: ofrecer `caveman-compress` sobre ese archivo.
+
+## Prohibido (caro en tokens)
+
+- Explorar “por si acaso” todo el monorepo.
+- Regenerar scaffolding / reseeding sin necesidad.
+- Subagentes caros o paralelos innecesarios.
+- Resúmenes largos al final de cada paso.

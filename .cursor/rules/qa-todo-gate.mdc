@@ -1,0 +1,69 @@
+---
+description: Tras cada to-do de un plan, QA por subagente obligatorio antes del siguiente
+alwaysApply: true
+---
+
+# QA gate por to-do
+
+Cuando haya un **plan con to-dos** (TodoWrite, checklist de fase, o plan explícito), aplica este gate.
+
+## Flujo obligatorio
+
+1. Trabajar **un solo** to-do a la vez.
+2. Al terminar la implementación de ese to-do (antes de marcarlo completed y antes del siguiente):
+   - Lanzar subagente vía **Task** (`subagent_type: generalPurpose`, `run_in_background: false`).
+   - Descripción corta: `QA to-do: <id o título>`.
+   - **Modelo barato / incluido** (ver abajo). Nunca modelos caros para QA.
+3. **No** pasar al siguiente to-do hasta veredicto **PASS**.
+4. Si **FAIL** → corregir → volver a lanzar QA sobre el mismo to-do. Repetir hasta PASS.
+5. Tras **PASS**: marcar hecho en **todas** las fuentes del plan que existan, luego continuar.
+
+## Modelo del subagente QA (obligatorio)
+
+QA es revisión de checklist: usar modelo **barato o incluido en el plan**, no frontier/caro.
+
+- **Default:** `model: "gemini-3-flash"`
+- **Alternativas OK:** `cursor-grok-4.6-high-fast`, `grok-4.7-high-fast`, `gemini-4-carbon-medium` (solo si flash no disponible)
+- **Prohibido para QA:** Opus, Sonnet high, GPT “pro”/caro, `gemini-4-neon-high`, cualquier `*-thinking` / high-tier salvo que el usuario lo pida explícitamente para ese QA
+
+El trabajo de implementación puede usar el modelo del chat padre; **solo el Task de QA** debe forzar el modelo barato.
+
+## Marcar lo hecho (plan existente)
+
+Si ya hay plan (TodoWrite, `docs/09-roadmap.md`, `docs/estado.md`, checklists en `docs/**`, u otro plan del chat):
+
+- Tras QA **PASS**, actualizar de inmediato el ítem a hecho/completed/`[x]`.
+- No dejar progreso solo en el mensaje al usuario: el plan escrito debe reflejar la realidad.
+- Si un ítem ya estaba hecho de antes, marcarlo al detectar evidencia (no rehacer trabajo; sí sincronizar el plan).
+- Mantener coherencia entre TodoWrite y docs del plan cuando ambos existan.
+
+## Prompt mínimo al subagente QA
+
+Incluir siempre:
+
+- Título/alcance del to-do y criterio de hecho
+- Archivos / diffs tocados (rutas concretas)
+- Pedir revisar:
+  1. Correctitud funcional de lo hecho en el to-do
+  2. Cumplimiento de `.cursor/rules/**` aplicables
+  3. Cumplimiento de skills del proyecto relevantes (p.ej. `nestjs-best-practices`, `frontend-design`, `modern-web-guidance`, `security-best-practices`, `security-and-hardening`, `caveman`) y rules Sequelize/Tailwind/`frontend-component-size` si aplica
+  4. Alineación con `docs/` si el to-do toca dominio/stack
+- Formato de respuesta exigido:
+
+```
+VEREDICTO: PASS | FAIL
+Hallazgos: (lista; vacía si PASS)
+Acciones requeridas: (si FAIL)
+```
+
+## Prohibido
+
+- Autocertificar QA sin subagente
+- Marcar completed / avanzar con FAIL pendiente
+- Agrupar varios to-dos en un solo QA salvo que el usuario lo pida
+- QA en background sin esperar resultado
+- Lanzar QA sin `model` barato / con modelo caro
+
+## Excepción
+
+To-dos puramente informativos (solo leer docs, sin cambios) → QA breve permitido, pero **sí** hay que lanzar el subagente y obtener PASS.

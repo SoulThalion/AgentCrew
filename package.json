@@ -1,0 +1,26 @@
+{
+  "name": "agentcrew",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Panel desktop de agentes Cursor",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @agentcrew/core && npm run build -w @agentcrew/hooks && npm run build -w @agentcrew/tts && npm run build -w @agentcrew/dock-windows && npm run build -w @agentcrew/dock-macos && npm run build -w @agentcrew/dock-linux && npm run build -w @agentcrew/panel",
+    "test": "npm run test -w @agentcrew/core && npm run test -w @agentcrew/hooks && npm run test -w @agentcrew/tts && npm run test -w @agentcrew/dock-windows",
+    "typecheck": "npm run typecheck -w @agentcrew/core && npm run typecheck -w @agentcrew/hooks",
+    "install-hooks": "npm run build -w @agentcrew/core && npm run build -w @agentcrew/hooks && node scripts/install-hooks.mjs",
+    "install:all": "node installer/install.mjs",
+    "panel": "npm run dev -w @agentcrew/panel",
+    "panel:start": "npm run start -w @agentcrew/panel",
+    "panel:dist": "npm run build && npm run dist -w @agentcrew/panel"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

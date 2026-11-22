@@ -1,0 +1,43 @@
+---
+description: Prefer Tailwind; CSS only when Tailwind cannot express it; scoped local vs shared CSS files
+globs: frontend/**/*.{tsx,jsx,css}
+alwaysApply: false
+---
+
+# Styles: Tailwind first
+
+When writing or changing frontend styles:
+
+1. **Tailwind first**: use Tailwind utility classes in the markup (`className="..."`) whenever possible.
+2. **CSS only when needed**: write custom CSS only when Tailwind cannot express the result (e.g. complex animations, third-party selectors, uncovered pseudo-elements, non-trivial `@keyframes`).
+3. **Single component → colocated**: if custom CSS is exclusive to one component, put it in that component file (CSS module `*.module.css` or a colocated style block). Do not create a separate global `.css` file for one-offs.
+4. **Multiple sites → CSS file**: create or extend a `.css` file only when the same style is reused across components/views. Prefer shared variables/utilities in `index.css` / `main.css` or existing utility sheets over duplicating rules.
+
+## Examples
+
+```tsx
+{/* ❌ BAD: CSS for something Tailwind already covers */}
+{/* .card { display: flex; gap: 1rem; padding: 1rem; border-radius: 0.5rem; } */}
+
+{/* ✅ GOOD: Tailwind utilities */}
+<div className="flex gap-4 p-4 rounded-lg">...</div>
+```
+
+```tsx
+{/* ❌ BAD: CSS file for a one-off component style */}
+{/* ButtonFancy.css imported only by ButtonFancy.tsx */}
+
+{/* ✅ GOOD: CSS module or colocated styles for effects Tailwind cannot cover */}
+{/* ButtonFancy.module.css → .buttonFancy::before { ... } */}
+```
+
+```css
+/* ✅ GOOD: shared CSS file (multiple consumers) */
+/* frontend/src/index.css or a reused utility sheet */
+```
+
+## Quick checklist
+
+- Can Tailwind do it? → classes in the component.
+- Cannot, and local only? → CSS module / colocated styles.
+- Used in multiple places? → shared `.css` file.

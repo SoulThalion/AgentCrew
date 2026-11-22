@@ -1,0 +1,30 @@
+---
+description: Contexto del panel de agentes Cursor (Electron multiplataforma)
+alwaysApply: true
+---
+
+# AgentCrew (panel-agentes)
+
+Repo: `AgentCrew`. Sidebar desktop: estado de agentes Cursor (hooks → estado → franja UI).
+
+Legacy referencia (no ampliar): `C:\Users\eomer\Downloads\panel-agentes`.
+
+## Stack
+
+- Monorepo: `apps/panel` (Electron + React + TypeScript + Vite), `packages/core`, `packages/hooks`, `packages/dock-*`
+- Hooks Cursor: Node CLI (no PowerShell como lógica principal)
+- Estado tipado en `~/.cursor/hooks/state/`
+- Estilos: Tailwind first
+
+## Dock por SO
+
+- Windows: AppBar real (`SHAppBarMessage`) — reserva área de trabajo
+- macOS: panel always-on-top; sin API pública de reserva (ventanas pueden solapar)
+- Linux: X11 `_NET_WM_STRUT_PARTIAL`; Wayland best-effort
+
+## Agente
+
+- Responder en español; caveman activo
+- QA gate (`qa-todo-gate`) con modelo barato
+- No inventar paridad Mac/Wayland de reserva de pantalla
+- Legacy PowerShell solo referencia hasta migrar; no ampliarlo

@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "skills": {
+    "electron-best-practices": {
+      "source": "jwynia/agent-skills",
+      "commit": "e02ec7e226a6e4f8419fd3b88a1d8e472d421b32",
+      "sourceType": "github",
+      "skillPath": "skills/tech/development/tooling/electron-best-practices/SKILL.md",
+      "computedHash": "b7f894103739114dc610ee76fda37b61e80d25672df708974df12874841e4eec",
+      "installMode": "copy"
+    },
+    "electron-development": {
+      "source": "Mindrally/skills",
+      "commit": "7682ca77710e0971eab4e0ae5dddfa281aea0ba5",
+      "sourceType": "github",
+      "skillPath": "electron-development/SKILL.md",
+      "computedHash": "02ba6a92bea1d26edccad270cec7cfb6a626026e5ded69b9816548650561b89c",
+      "installMode": "copy"
+    },
+    "native-feel-cross-platform-desktop": {
+      "source": "yetone/native-feel-skill",
+      "commit": "9bd88c6378e1a80a4da165f3ee7bebb761a74945",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "80d1e61a0853859ae1c2dd993ea91642ea88e9d2a5267920e30cdb87d28b2dca",
+      "installMode": "copy"
+    },
+    "react-vite-best-practices": {
+      "source": "AsyrafHussin/agent-skills",
+      "commit": "1aa0ff717c10309226c9e678f00873976450fd76",
+      "sourceType": "github",
+      "skillPath": "skills/react-vite-best-practices/SKILL.md",
+      "computedHash": "db8e3e2224aa28562593fb65b9e588fa71a5568e641958b935006bd288d71f4c",
+      "installMode": "copy"
+    },
+    "typescript-monorepo": {
+      "source": "philtzjp/skills",
+      "commit": "5e5ecfcc72301ee9e66e56b759d7e83b3c998344",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/typescript-monorepo/SKILL.md",
+      "computedHash": "9c2ed866372f14bcc2111fc2b868c9580dc5ef2f21238f66b046f19a1862f477",
+      "installMode": "copy"
+    }
+  }
+}

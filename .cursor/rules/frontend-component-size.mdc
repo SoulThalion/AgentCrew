@@ -1,0 +1,51 @@
+---
+description: Keep React files small — componentize views; shared vs feature-local
+globs: frontend/src/**/*.{tsx,jsx,ts,js}
+alwaysApply: false
+---
+
+# Small components, not fat views
+
+Never grow a single React file into a “god file”. Prefer many small pieces over one large page/component.
+
+## Size budget
+
+| Signal | Action |
+|--------|--------|
+| Page / component approaching **~300 lines** | Split before adding more UI |
+| Past **~400 lines** | Treat as debt — extract on the current change if you touch it |
+| JSX with several distinct UI blocks (list, chart, modals, form, config) | Each block → own component |
+
+Logic that is not UI → hooks (`hooks/`), utils, or API clients — not a bigger `.tsx`.
+
+## Where to put pieces
+
+| Reuse? | Location | Example |
+|--------|----------|---------|
+| Used (or likely) in **2+** routes / domains | `components/` or `components/<domain>/` | `components/ui/Button.tsx`, `components/plan/GoalCard.tsx` |
+| Only for **one** page/feature | Folder next to that page | `pages/goals/GoalsList.tsx` with shell `pages/GoalsPage.tsx` |
+
+Page shell orchestrates: layout, data wiring, event routing. It should **not** own large markup for every panel/modal/chart.
+
+```
+# ❌ BAD — everything in one file
+pages/GoalsPage.tsx   (~1500 lines: list + form + modals + charts)
+
+# ✅ GOOD — thin page + local pieces (+ shared when reusable)
+pages/GoalsPage.tsx
+pages/goals/GoalsList.tsx
+pages/goals/GoalForm.tsx
+pages/goals/GoalDoneModal.tsx
+components/plan/ProgressBar.tsx   # shared
+```
+
+## Rules of thumb
+
+- **Reusable** = generic API (props), no hard dependency on one route’s store shape when avoidable.
+- **Feature-local** = knows that feature’s data/forms; still one job per file.
+- Extracting into a local folder beats leaving a mega-JSX “until we need reuse”.
+- Do not create a large “subcomponent” that just moves the same blob — split by responsibility (list vs form vs modal vs chart).
+
+## When editing existing fat files
+
+If the task only needs a small change, fix the change. If you add a new substantial UI block to an already large page, put the **new** block in its own component (feature-local or shared) instead of growing the file further.

@@ -1,0 +1,661 @@
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  screen,
+  shell,
+} from 'electron';
+import path from 'node:path';
+import fs from 'node:fs';
+import {
+  defaultStateDir,
+  listAgents,
+  type AgentSlot,
+  STATE_COLORS,
+  STATE_LABELS,
+  isAgentState,
+} from '@agentcrew/core';
+import {
+  DEFAULT_TTS_SETTINGS,
+  ensureDirs,
+  speakTipo,
+  resolveAndSpeak,
+  type TtsSettings,
+} from '@agentcrew/tts';
+import { loadSettings, saveSettings, settingsPublic } from './settingsStore';
+import { loadPanelPrefs, savePanelPrefs, type PanelPrefs } from './panelPrefs';
+import {
+  loadStatePrefs,
+  setMuted as writeMuted,
+  setMuestra as writeMuestra,
+  type PanelStatePrefs,
+} from './statePrefs';
+import { createTray, destroyTray, refreshTray } from './trayMenu';
+import { focusCursorWindow } from './focusCursor';
+import { openCursorChat } from './openChat';
+import { destroyHoverCard, hideHoverCard, showHoverCard } from './hoverCard';
+import { learnTitlesOnce } from './learnTitles';
+import { pathToFileURL } from 'node:url';
+import { readTitulo, writeTitulo } from '@agentcrew/core';
+
+const STRIP_WIDTH = 72;
+const gotLock = app.requestSingleInstanceLock();
+
+let mainWindow: BrowserWindow | null = null;
+let settingsWindow: BrowserWindow | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let lastPayload = '';
+let ttsSettings: TtsSettings = { ...DEFAULT_TTS_SETTINGS };
+let panelPrefs: PanelPrefs = { displayId: null };
+let statePrefs: PanelStatePrefs = loadStatePrefsFallback();
+let dockApi: {
+  attach: (...args: unknown[]) => void;
+  detach: () => void;
+  reposition: (...args: unknown[]) => void;
+  setMonitor?: (
+    rc: { left: number; top: number; right: number; bottom: number },
+    scaleFactor?: number,
+  ) => void;
+  isAttached: () => boolean;
+} | null = null;
+
+function stateDir(): string {
+  return process.env.AGENTCREW_STATE_DIR || defaultStateDir();
+}
+
+function loadStatePrefsFallback(): PanelStatePrefs {
+  try {
+    return loadStatePrefs(stateDir());
+  } catch {
+    return {
+      muted: false,
+      muteUntil: null,
+      volume: 100,
+      aviso: 'voz',
+      cuando: 'inactivo',
+      muestra: false,
+    };
+  }
+}
+
+function syncTtsFromState(): void {
+  statePrefs = loadStatePrefs(stateDir());
+  ttsSettings = {
+    ...ttsSettings,
+    muted: statePrefs.muted,
+    volume: statePrefs.volume,
+  };
+}
+
+function trayHooks() {
+  return {
+    stateDir,
+    showPanel: () => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        createWindow();
+        return;
+      }
+      layoutWindow(mainWindow);
+      mainWindow.show();
+      if (!dockApi?.isAttached()) attachDock(mainWindow);
+    },
+    hidePanel: () => {
+      try {
+        dockApi?.detach();
+      } catch {
+        /* ignore */
+      }
+      dockApi = null;
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+    },
+    isPanelVisible: () =>
+      Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
+    openSettings,
+    testVoice: (tipo: string) => {
+      syncTtsFromState();
+      void speakTipo(tipo, ttsSettings, speakPaths(), statePrefs.aviso);
+    },
+    onPrefs: (p: PanelStatePrefs) => {
+      statePrefs = p;
+      syncTtsFromState();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('prefs:update', p);
+      }
+    },
+  };
+}
+
+function repoRoot(): string {
+  // Empaquetado: voces en resources/; dev: raíz monorepo
+  if (app.isPackaged) return process.resourcesPath;
+  return path.resolve(__dirname, '..', '..', '..');
+}
+
+function speakPaths() {
+  const voces = path.join(repoRoot(), 'voces');
+  const cache = path.join(stateDir(), 'tts-cache');
+  ensureDirs({ vocesDir: voces, cacheDir: cache });
+  return { vocesDir: voces, cacheDir: cache };
+}
+
+function isDev(): boolean {
+  return process.env.AGENTCREW_PANEL_DEV === '1';
+}
+
+function agentsPayload(): string {
+  const agents = listAgents(stateDir()).map((a: AgentSlot) => {
+    const state = a.state;
+    const color =
+      isAgentState(state) && STATE_COLORS[state]
+        ? STATE_COLORS[state]
+        : '#8A8A8A';
+    const label =
+      isAgentState(state) && STATE_LABELS[state]
+        ? STATE_LABELS[state]
+        : String(state);
+    return {
+      id: a.id,
+      state,
+      title: a.title,
+      phrase: a.phrase,
+      order: a.order,
+      subagentCount: a.subagentCount,
+      color,
+      label,
+    };
+  });
+  return JSON.stringify({ agents, stateDir: stateDir() });
+}
+
+function pushAgents(force = false): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const payload = agentsPayload();
+  if (!force && payload === lastPayload) return;
+  lastPayload = payload;
+  mainWindow.webContents.send('agents:update', payload);
+}
+
+function resolveDisplay() {
+  const primary = screen.getPrimaryDisplay();
+  if (panelPrefs.displayId == null) return primary;
+  const found = screen.getAllDisplays().find((d) => d.id === panelPrefs.displayId);
+  return found ?? primary;
+}
+
+/** Bounds DIP → rect físico Win32 AppBar. */
+function physicalMonitorRc(d: Electron.Display) {
+  const r = screen.dipToScreenRect(null, {
+    x: d.bounds.x,
+    y: d.bounds.y,
+    width: d.bounds.width,
+    height: d.bounds.height,
+  });
+  return {
+    left: r.x,
+    top: r.y,
+    right: r.x + r.width,
+    bottom: r.y + r.height,
+  };
+}
+
+function workArea() {
+  const d = resolveDisplay();
+  return { x: d.workArea.x, y: d.workArea.y, width: d.workArea.width, height: d.workArea.height };
+}
+
+function placeStripFallback(win: BrowserWindow): void {
+  const a = workArea();
+  win.setBounds({
+    x: a.x + a.width - STRIP_WIDTH,
+    y: a.y,
+    width: STRIP_WIDTH,
+    height: a.height,
+  });
+}
+
+function applyDockMonitor(): void {
+  const d = resolveDisplay();
+  if (!dockApi?.isAttached()) {
+    if (mainWindow && !mainWindow.isDestroyed()) placeStripFallback(mainWindow);
+    return;
+  }
+  if (dockApi.setMonitor) {
+    dockApi.setMonitor(physicalMonitorRc(d), d.scaleFactor || 1);
+  } else {
+    dockApi.reposition();
+  }
+}
+
+function layoutWindow(win: BrowserWindow): void {
+  if (dockApi?.isAttached()) {
+    try {
+      applyDockMonitor();
+    } catch {
+      placeStripFallback(win);
+    }
+  } else {
+    placeStripFallback(win);
+  }
+}
+
+function attachDock(win: BrowserWindow): void {
+  try {
+    const d = resolveDisplay();
+    if (process.platform === 'win32') {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      dockApi = require('@agentcrew/dock-windows');
+      // AppBar = px físicos; arranque = primary salvo preferencia usuario
+      dockApi!.attach(win, STRIP_WIDTH, {
+        scaleFactor: d.scaleFactor || 1,
+        monitorRc: physicalMonitorRc(d),
+      });
+    } else if (process.platform === 'darwin') {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      dockApi = require('@agentcrew/dock-macos');
+      dockApi!.attach(win, STRIP_WIDTH, workArea());
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      dockApi = require('@agentcrew/dock-linux');
+      dockApi!.attach(win, STRIP_WIDTH, workArea());
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    try {
+      fs.appendFileSync(
+        path.join(stateDir(), 'panel-error.log'),
+        `${new Date().toISOString()} dock: ${msg}\n`,
+      );
+    } catch {
+      /* ignore */
+    }
+    placeStripFallback(win);
+  }
+}
+
+function listDisplaysPublic() {
+  const primaryId = screen.getPrimaryDisplay().id;
+  const current = resolveDisplay();
+  return {
+    currentId: current.id,
+    primaryId,
+    displays: screen.getAllDisplays().map((d) => ({
+      id: d.id,
+      label:
+        d.id === primaryId
+          ? `Principal (${d.size.width}×${d.size.height})`
+          : `Pantalla ${d.id} (${d.size.width}×${d.size.height})`,
+      primary: d.id === primaryId,
+    })),
+  };
+}
+
+function consumeMostrar(): void {
+  const file = path.join(stateDir(), 'mostrar.txt');
+  try {
+    if (!fs.existsSync(file)) return;
+    fs.unlinkSync(file);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      layoutWindow(mainWindow);
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function consumeAjustes(): void {
+  const file = path.join(stateDir(), 'ajustes.txt');
+  try {
+    if (!fs.existsSync(file)) return;
+    fs.unlinkSync(file);
+    openSettings();
+  } catch {
+    /* ignore */
+  }
+}
+
+function consumeSonar(): void {
+  const dir = stateDir();
+  if (!fs.existsSync(dir)) return;
+  syncTtsFromState();
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.startsWith('sonar-') || !name.endsWith('.txt')) continue;
+    const full = path.join(dir, name);
+    try {
+      const tipo = fs.readFileSync(full, 'utf8').trim() || 'fin';
+      fs.unlinkSync(full);
+      void speakTipo(tipo, ttsSettings, speakPaths(), statePrefs.aviso);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function openSettings(): void {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.show();
+    settingsWindow.focus();
+    return;
+  }
+  settingsWindow = new BrowserWindow({
+    width: 440,
+    height: 600,
+    minWidth: 360,
+    minHeight: 420,
+    title: 'Ajustes TTS',
+    backgroundColor: '#18181b',
+    autoHideMenuBar: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      // Fiable: hash/query a veces no llegan a React en file://
+      additionalArguments: ['--agentcrew-page=settings'],
+    },
+  });
+  const indexHtml = path.join(__dirname, '..', 'dist-renderer', 'index.html');
+  if (isDev()) {
+    void settingsWindow.loadURL('http://127.0.0.1:5173/?page=settings#settings');
+  } else {
+    void settingsWindow.loadURL(`${pathToFileURL(indexHtml).href}?page=settings#settings`);
+  }
+  settingsWindow.once('ready-to-show', () => {
+    settingsWindow?.show();
+    settingsWindow?.focus();
+  });
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+}
+
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: STRIP_WIDTH,
+    height: 800,
+    frame: false,
+    transparent: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    title: '',
+    autoHideMenuBar: true,
+    backgroundColor: '#1a1a1e',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  // Evita caption vertical "AgentCrew" en franja estrecha (Windows)
+  mainWindow.setTitle('');
+  mainWindow.setMenuBarVisibility(false);
+
+  // Win32: no placeStripFallback antes del AppBar (setBounds clampa workArea → hueco vacío)
+  if (process.platform !== 'win32') {
+    placeStripFallback(mainWindow);
+  }
+
+  if (isDev()) {
+    void mainWindow.loadURL('http://127.0.0.1:5173');
+  } else {
+    void mainWindow.loadFile(path.join(__dirname, '..', 'dist-renderer', 'index.html'));
+  }
+
+  mainWindow.once('ready-to-show', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.show();
+    attachDock(mainWindow);
+  });
+
+  mainWindow.on('closed', () => {
+    try {
+      dockApi?.detach();
+    } catch {
+      /* ignore */
+    }
+    dockApi = null;
+    mainWindow = null;
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    pushAgents(true);
+    if (dockApi?.isAttached()) {
+      setTimeout(() => dockApi?.reposition(), 100);
+    }
+  });
+}
+
+function startWatchers(): void {
+  if (pollTimer) clearInterval(pollTimer);
+  let learnTick = 0;
+  pollTimer = setInterval(() => {
+    pushAgents();
+    consumeMostrar();
+    consumeAjustes();
+    consumeSonar();
+    // ~cada 2.4s: aprender títulos "Open agent …" de Cursor (async)
+    learnTick++;
+    if (learnTick % 3 === 0) {
+      void learnTitlesOnce(stateDir()).then((n) => {
+        if (n > 0) pushAgents(true);
+      });
+    }
+  }, 800);
+
+  try {
+    const dir = stateDir();
+    fs.mkdirSync(dir, { recursive: true });
+    fs.watch(dir, { persistent: true }, () => {
+      pushAgents();
+      consumeMostrar();
+      consumeSonar();
+    });
+  } catch {
+    /* poll only */
+  }
+}
+
+function registerIpc(): void {
+  ipcMain.handle('agents:list', () => agentsPayload());
+  ipcMain.handle(
+    'agents:focus',
+    async (_e, payload?: string | { id?: string; title?: string }) => {
+      // Async: nunca execFileSync aquí (congelaba AppBar)
+      const id =
+        typeof payload === 'object' && payload && typeof payload.id === 'string'
+          ? payload.id.trim()
+          : '';
+      const fromUi =
+        typeof payload === 'object' && payload && typeof payload.title === 'string'
+          ? payload.title.trim()
+          : typeof payload === 'string'
+            ? payload.trim()
+            : '';
+
+      // Refrescar títulos UI antes de abrir (no bloquea UI: await en handler async)
+      try {
+        await learnTitlesOnce(stateDir());
+      } catch {
+        /* ignore */
+      }
+
+      const learned = id ? readTitulo(stateDir(), id).trim() : '';
+      const openAs = learned || fromUi;
+      if (!openAs) return focusCursorWindow();
+
+      const result = await openCursorChat(openAs);
+      if (result.ok && id && result.matchedTitle) {
+        try {
+          writeTitulo(stateDir(), id, result.matchedTitle);
+          pushAgents(true);
+        } catch {
+          /* ignore */
+        }
+      }
+      return result.ok;
+    },
+  );
+  ipcMain.handle(
+    'hover:show',
+    (
+      _e,
+      payload: {
+        title: string;
+        state: string;
+        stateColor: string;
+        phrase: string;
+        anchorX: number;
+        anchorY: number;
+        anchorH: number;
+      },
+    ) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return false;
+      const b = mainWindow.getBounds();
+      // payload.anchor* viene en coords viewport de la franja (DIP)
+      showHoverCard({
+        title: payload.title,
+        state: payload.state,
+        stateColor: payload.stateColor,
+        phrase: payload.phrase,
+        anchorX: b.x + payload.anchorX,
+        anchorY: b.y + payload.anchorY,
+        anchorH: payload.anchorH,
+      });
+      return true;
+    },
+  );
+  ipcMain.handle('hover:hide', () => {
+    hideHoverCard();
+    return true;
+  });
+  ipcMain.handle('settings:get', () => settingsPublic(ttsSettings));
+  ipcMain.handle('settings:save', (_e, patch: Partial<TtsSettings> & { fishApiKey?: string; elevenApiKey?: string }) => {
+    const next: TtsSettings = { ...ttsSettings, ...patch };
+    if (patch.fishApiKey === '********') next.fishApiKey = ttsSettings.fishApiKey;
+    if (patch.elevenApiKey === '********') next.elevenApiKey = ttsSettings.elevenApiKey;
+    if (patch.fishApiKey === '') next.fishApiKey = '';
+    if (patch.elevenApiKey === '') next.elevenApiKey = '';
+    ttsSettings = next;
+    saveSettings(ttsSettings);
+    return settingsPublic(ttsSettings);
+  });
+  ipcMain.handle('settings:test', async (_e, text?: string) => {
+    const phrase = (text && String(text).trim()) || 'Prueba de voz AgentCrew.';
+    return resolveAndSpeak(phrase, ttsSettings, speakPaths());
+  });
+  ipcMain.handle('settings:open', () => {
+    openSettings();
+    return true;
+  });
+  // Fish REST = API key (sin OAuth). Portal = crear key en browser.
+  ipcMain.handle('fish:openPortal', async () => {
+    const url = 'https://fish.audio/app/api-keys';
+    await shell.openExternal(url);
+    return { ok: true, url };
+  });
+  ipcMain.handle('dock:listDisplays', () => listDisplaysPublic());
+  ipcMain.handle('dock:setDisplay', (_e, displayId: number | null) => {
+    const primaryId = screen.getPrimaryDisplay().id;
+    if (displayId == null || displayId === primaryId) {
+      panelPrefs = { displayId: null };
+    } else if (screen.getAllDisplays().some((d) => d.id === displayId)) {
+      panelPrefs = { displayId };
+    } else {
+      panelPrefs = { displayId: null };
+    }
+    savePanelPrefs(panelPrefs);
+    applyDockMonitor();
+    return listDisplaysPublic();
+  });
+  ipcMain.handle('prefs:get', () => {
+    syncTtsFromState();
+    return statePrefs;
+  });
+  ipcMain.handle('prefs:toggleMute', () => {
+    statePrefs = writeMuted(stateDir(), !loadStatePrefs(stateDir()).muted);
+    syncTtsFromState();
+    refreshTray(trayHooks());
+    return statePrefs;
+  });
+  ipcMain.handle('prefs:setMuestra', (_e, on: boolean) => {
+    statePrefs = writeMuestra(stateDir(), Boolean(on));
+    return statePrefs;
+  });
+  // Footer "x" = Parar (legacy): oculta franja, deja bandeja
+  ipcMain.handle('panel:stop', () => {
+    try {
+      dockApi?.detach();
+    } catch {
+      /* ignore */
+    }
+    dockApi = null;
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+    refreshTray(trayHooks());
+    return true;
+  });
+  ipcMain.handle('panel:quit', () => {
+    app.quit();
+    return true;
+  });
+}
+
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    try {
+      fs.writeFileSync(path.join(stateDir(), 'mostrar.txt'), '1', 'utf8');
+    } catch {
+      /* ignore */
+    }
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      layoutWindow(mainWindow);
+      mainWindow.show();
+      mainWindow.focus();
+      pushAgents(true);
+    }
+  });
+
+  app.whenReady().then(() => {
+    ttsSettings = loadSettings();
+    panelPrefs = loadPanelPrefs();
+    syncTtsFromState();
+    registerIpc();
+    createWindow();
+    createTray(trayHooks());
+    startWatchers();
+    screen.on('display-added', () => applyDockMonitor());
+    screen.on('display-removed', () => {
+      // Si se desconectó la elegida → primary
+      if (
+        panelPrefs.displayId != null &&
+        !screen.getAllDisplays().some((d) => d.id === panelPrefs.displayId)
+      ) {
+        panelPrefs = { displayId: null };
+        savePanelPrefs(panelPrefs);
+      }
+      applyDockMonitor();
+    });
+    screen.on('display-metrics-changed', () => applyDockMonitor());
+  });
+
+  app.on('window-all-closed', () => {
+    // No salir: bandeja mantiene proceso (legacy NotifyIcon)
+  });
+
+  app.on('before-quit', () => {
+    try {
+      dockApi?.detach();
+    } catch {
+      /* ignore */
+    }
+    destroyHoverCard();
+    destroyTray();
+    if (pollTimer) clearInterval(pollTimer);
+  });
+}

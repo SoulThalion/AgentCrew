@@ -1,0 +1,24 @@
+{
+  "name": "@agentcrew/hooks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agentcrew-hook": "./dist/cli.js"
+  },
+  "main": "./dist/cli.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@agentcrew/core": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

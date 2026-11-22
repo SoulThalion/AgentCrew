@@ -1,0 +1,27 @@
+---
+description: Light/dark theme with localStorage persistence from day one
+globs: frontend/**/*.{tsx,jsx,css,html}
+alwaysApply: false
+---
+
+# Theme: light / dark (persistent)
+
+MiraiWay ships **light and dark** from the start. Preference persists in **`localStorage`**.
+
+## Requirements
+
+1. Two themes: `light` | `dark` (optional third: follow `prefers-color-scheme` only as **initial** default when no stored value).
+2. Persist key e.g. `miraiway-theme` → `'light' | 'dark'`.
+3. Apply **before** first paint when possible (inline script in `index.html` or equivalent) to avoid flash of wrong theme.
+4. Toggle visible in UI (shell/header) from the authenticated layout and ideally login too.
+5. Drive styles via CSS variables / Tailwind `dark:` (class on `html` or `document.documentElement`, e.g. `class="dark"`). Prefer class strategy over `media` alone so user override wins.
+6. Do **not** hardcode colors that ignore the theme; use tokens / `dark:` variants.
+
+## Do / don’t
+
+- **Do** read `localStorage` on boot; write on every toggle.
+- **Do** keep SSR/hydration-safe if applicable (MiraiWay is Vite SPA → mainly FOUC prevention).
+- **Don’t** store theme only in React state without persistence.
+- **Don’t** force dark-by-default as aesthetic default without user choice (see project frontend taste rules).
+
+Consult `modern-web-guidance` for dark-mode platform patterns when implementing.
