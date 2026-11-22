@@ -4,7 +4,7 @@
 
 - Franja vertical ~72 px en borde derecho
 - Sprite canvas 56×66 por agente = `Nuevo-Sprite` legacy (obra, lupa, humo, Zzz, minis…)
-- Footer: Mudo | Muestra | Cerrar (MDL2)
+- Footer: `Inc`/`Otr` % uso Cursor + Mudo | Muestra | Cerrar
 - Bandeja sistema: mute/volumen/cuando/aviso/probar (como NotifyIcon legacy)
 
 ## Interacción

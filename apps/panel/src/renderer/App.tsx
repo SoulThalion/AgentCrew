@@ -11,7 +11,13 @@ type AgentView = {
   subagentCount: number;
   color: string;
   label: string;
+  /** Chat UI enfocado (paridad Fondo-Fila legacy #2A2D35). */
+  focused?: boolean;
 };
+
+type UsoView = { incluido: string; otros: string };
+
+const USO_DEFAULT: UsoView = { incluido: 'Inc -', otros: 'Otr -' };
 
 const DEMO: AgentView[] = [
   { id: 'd-trab', state: 'trabajando', title: 'Trabajando', phrase: '', order: 0, subagentCount: 0, color: '#4FA3FF', label: 'Trabajando' },
@@ -19,18 +25,32 @@ const DEMO: AgentView[] = [
   { id: 'd-plan', state: 'planificando', title: 'Plan', phrase: 'Modo plan.', order: 2, subagentCount: 0, color: '#A68BFF', label: 'Planificando' },
   { id: 'd-ley', state: 'leyendo', title: 'Leyendo', phrase: 'Lee archivos.', order: 3, subagentCount: 0, color: '#A68BFF', label: 'Leyendo' },
   { id: 'd-esp', state: 'esperando', title: 'Espera', phrase: 'Te pregunta.', order: 4, subagentCount: 0, color: '#FFB020', label: 'Esperando tu respuesta' },
-  { id: 'd-ate', state: 'atento', title: 'Atento', phrase: 'Chat enfocado.', order: 5, subagentCount: 0, color: '#A68BFF', label: 'Pendiente' },
+  { id: 'd-ate', state: 'atento', title: 'Atento', phrase: 'Chat enfocado.', order: 5, subagentCount: 0, color: '#A68BFF', label: 'Pendiente', focused: true },
   { id: 'd-fin', state: 'terminado', title: 'Fin', phrase: 'Acabó.', order: 6, subagentCount: 0, color: '#3DD68C', label: 'Terminado' },
   { id: 'd-err', state: 'error', title: 'Error', phrase: 'Stop error.', order: 7, subagentCount: 0, color: '#FF5C5C', label: 'Error' },
   { id: 'd-det', state: 'detenido', title: 'Detenido', phrase: 'Leído.', order: 8, subagentCount: 0, color: '#8A8A8A', label: 'Detenido' },
 ];
 
-function parsePayload(raw: string): AgentView[] {
+function parsePayload(raw: string): { agents: AgentView[]; uso: UsoView } {
   try {
-    const data = JSON.parse(raw) as { agents?: AgentView[] };
-    return Array.isArray(data.agents) ? data.agents : [];
+    const data = JSON.parse(raw) as {
+      agents?: AgentView[];
+      uso?: Partial<UsoView>;
+    };
+    const agents = Array.isArray(data.agents) ? data.agents : [];
+    const uso: UsoView = {
+      incluido:
+        typeof data.uso?.incluido === 'string' && data.uso.incluido
+          ? data.uso.incluido
+          : USO_DEFAULT.incluido,
+      otros:
+        typeof data.uso?.otros === 'string' && data.uso.otros
+          ? data.uso.otros
+          : USO_DEFAULT.otros,
+    };
+    return { agents, uso };
   } catch {
-    return [];
+    return { agents: [], uso: USO_DEFAULT };
   }
 }
 
@@ -42,6 +62,7 @@ function isSettingsRoute(): boolean {
 
 export function App() {
   const [agents, setAgents] = useState<AgentView[]>([]);
+  const [uso, setUso] = useState<UsoView>(USO_DEFAULT);
   const [settings, setSettingsMode] = useState(isSettingsRoute());
   const [muestra, setMuestra] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -56,7 +77,12 @@ export function App() {
     if (settings) return;
     const api = window.agentcrew;
     if (!api) return;
-    void api.listAgents().then((raw) => setAgents(parsePayload(raw)));
+    const apply = (raw: string) => {
+      const p = parsePayload(raw);
+      setAgents(p.agents);
+      setUso(p.uso);
+    };
+    void api.listAgents().then(apply);
     void api.getPanelPrefs().then((p) => {
       setMuted(Boolean(p.muted));
       setMuestra(Boolean(p.muestra));
@@ -65,7 +91,7 @@ export function App() {
       setMuted(Boolean(p.muted));
       setMuestra(Boolean(p.muestra));
     });
-    const offAgents = api.onAgentsUpdate((raw) => setAgents(parsePayload(raw)));
+    const offAgents = api.onAgentsUpdate(apply);
     return () => {
       offPrefs();
       offAgents();
@@ -75,6 +101,7 @@ export function App() {
   if (settings) return <Settings />;
 
   const list = muestra ? DEMO : agents;
+  const FOOTER_H = 62;
 
   return (
     <div
@@ -91,7 +118,16 @@ export function App() {
             <button
               key={a.id}
               type="button"
-              className="mb-1 flex w-full flex-col items-center rounded-sm hover:bg-white/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500"
+              className={
+                a.focused
+                  ? 'mb-1 flex w-full flex-col items-center focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500'
+                  : 'mb-1 flex w-full flex-col items-center hover:bg-white/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500'
+              }
+              style={
+                a.focused
+                  ? { background: '#2A2D35', borderRadius: 6 }
+                  : undefined
+              }
               onMouseEnter={(e) => {
                 const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
                 void window.agentcrew.showHoverCard({
@@ -110,7 +146,8 @@ export function App() {
               onClick={() => {
                 void window.agentcrew.hideHoverCard();
                 if (!muestra) {
-                  void window.agentcrew.focusAgent({ id: a.id, title: a.title });
+                  const id = a.id.startsWith('ui:') ? '' : a.id;
+                  void window.agentcrew.focusAgent({ id, title: a.title });
                 }
               }}
             >
@@ -124,7 +161,7 @@ export function App() {
         )}
       </div>
 
-      {/* Footer legacy: Mudo | Muestra | Cerrar — fixed al borde (AppBar no confía en flex height) */}
+      {/* Footer legacy: uso Inc/Otr + Mudo | Muestra | Cerrar */}
       <div
         data-footer="mando"
         style={{
@@ -133,13 +170,37 @@ export function App() {
           right: 0,
           bottom: 0,
           zIndex: 50,
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          height: 32,
-          borderTop: '1px solid rgba(255,255,255,0.22)',
           background: '#25262C',
         }}
       >
+        <div
+          style={{
+            borderTop: '1px solid rgba(255,255,255,0.13)',
+            padding: '4px 2px 3px',
+            textAlign: 'center',
+            fontFamily: 'Segoe UI, sans-serif',
+            fontSize: 11,
+            lineHeight: 1.25,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+          }}
+          title="Consumo Cursor"
+        >
+          <div style={{ color: '#7EB6FF' }} title="Incluido">
+            {uso.incluido}
+          </div>
+          <div style={{ color: '#E2B34C', marginTop: 1 }} title="Otros modelos">
+            {uso.otros}
+          </div>
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr',
+            height: 32,
+            borderTop: '1px solid rgba(255,255,255,0.22)',
+          }}
+        >
         <button
           type="button"
           title={muted ? 'Activar avisos' : 'Silenciar avisos'}
@@ -222,9 +283,10 @@ export function App() {
         >
           ×
         </button>
+        </div>
       </div>
       {/* Spacer: lista no tapa footer fixed */}
-      <div style={{ height: 32, flexShrink: 0 }} aria-hidden />
+      <div style={{ height: FOOTER_H, flexShrink: 0 }} aria-hidden />
     </div>
   );
 }

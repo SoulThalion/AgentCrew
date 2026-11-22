@@ -40,7 +40,7 @@ Detalle: `10-dock-plataformas.md`.
 
 ## D6 — Audio / TTS + reutilizar MP3 existentes
 
-**Decisión:** Portar pipeline legacy a Node. **Obligatorio aprovechar los MP3 ya generados** en `Downloads/panel-agentes/voces/frase-*.mp3` (~54 archivos). No regenerar frases conocidas si el archivo existe.
+**Decisión:** Portar pipeline legacy a Node. **Obligatorio aprovechar los MP3 ya generados** en `voces/frase-*.mp3` del repo (~54 archivos). No regenerar frases conocidas si el archivo existe.
 
 **Convención de nombre (compatibilidad binaria):**
 

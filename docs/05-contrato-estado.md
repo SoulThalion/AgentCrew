@@ -33,6 +33,13 @@ Escritura **atómica** (temp + replace). Caducidad legacy: runs ~3 h; estados vi
 | `volumen.txt` | 0–100 |
 | `ui-tipo.txt` | `busqueda` \| `aprobacion` \| `pregunta` |
 | `mostrar.txt` | señal “traer panel al frente” |
+| `cerrar.txt` | señal “cerrar panel” (watcher / manual) |
+| `panel.pid` | PID proceso panel Electron |
+| `cursor-watch.pid` | PID del watcher (single-instance) |
+| `watch-off.txt` | desactiva watcher follow Cursor |
+| `cursor-watch.log` | log del watcher IDE↔panel |
+| `uso.txt` | `Inc N%\|Otr M%` — consumo Cursor (panel) |
+| `uso-avisos.txt` | `IncUmbral\|OtrUmbral` — último umbral de uso anunciado por voz (50/65/80/90/95/100) |
 | `debug.log` | log truncado |
 | `vigilante.pid` | PID loop idle |
 

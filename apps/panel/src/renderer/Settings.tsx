@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type SettingsView = {
   provider: 'none' | 'fish' | 'elevenlabs';
@@ -34,6 +34,12 @@ export function Settings() {
   const [displays, setDisplays] = useState<DisplayOpt[]>([]);
   const [displayId, setDisplayId] = useState<number | null>(null);
   const [primaryId, setPrimaryId] = useState<number | null>(null);
+  const [ready, setReady] = useState(false);
+  const sRef = useRef(s);
+  const readyRef = useRef(false);
+  const lastSavedRef = useRef('');
+  sRef.current = s;
+  readyRef.current = ready;
 
   useEffect(() => {
     document.title = 'Ajustes TTS';
@@ -42,10 +48,17 @@ export function Settings() {
       setStatus('API no disponible (preload)');
       return;
     }
-    void api.getSettings()
-      .then((raw) => setS({ ...empty, ...(raw as SettingsView) }))
+    void api
+      .getSettings()
+      .then((raw) => {
+        const loaded = { ...empty, ...(raw as SettingsView) };
+        setS(loaded);
+        lastSavedRef.current = JSON.stringify(loaded);
+        setReady(true);
+      })
       .catch(() => setStatus('No se pudieron cargar ajustes'));
-    void api.listDisplays()
+    void api
+      .listDisplays()
       .then((raw) => {
         const d = raw as {
           displays?: DisplayOpt[];
@@ -59,14 +72,65 @@ export function Settings() {
       .catch(() => setStatus('No se pudieron listar pantallas'));
   }, []);
 
-  async function save() {
-    const next = (await window.agentcrew.saveSettings(s)) as SettingsView;
-    setS({ ...empty, ...next });
-    setStatus('Guardado');
+  async function save(quiet = false) {
+    const api = window.agentcrew;
+    if (!api || !readyRef.current) return;
+    const prev = sRef.current;
+    try {
+      const next = (await api.saveSettings(prev)) as SettingsView;
+      // No pisar key en edición con máscara ********
+      const merged: SettingsView = {
+        ...empty,
+        ...next,
+        fishApiKey:
+          prev.fishApiKey === '********' ? next.fishApiKey : prev.fishApiKey,
+        elevenApiKey:
+          prev.elevenApiKey === '********'
+            ? next.elevenApiKey
+            : prev.elevenApiKey,
+      };
+      setS(merged);
+      lastSavedRef.current = JSON.stringify(merged);
+      if (!quiet) setStatus('Guardado');
+      else setStatus('Guardado automáticamente');
+    } catch {
+      setStatus('Error al guardar');
+    }
   }
+
+  function flushIfReady() {
+    if (!readyRef.current) return;
+    const snap = JSON.stringify(sRef.current);
+    if (snap === lastSavedRef.current) return;
+    void window.agentcrew?.saveSettings(sRef.current);
+  }
+
+  // Autosave al cambiar (debounce)
+  useEffect(() => {
+    if (!ready) return;
+    const snap = JSON.stringify(s);
+    if (snap === lastSavedRef.current) return;
+    const t = window.setTimeout(() => {
+      void save(true);
+    }, 500);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al mutar s
+  }, [s, ready]);
+
+  useEffect(() => {
+    const onHide = () => flushIfReady();
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('beforeunload', onHide);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('beforeunload', onHide);
+      flushIfReady();
+    };
+  }, []);
 
   async function test() {
     setStatus('Reproduciendo…');
+    await save(true);
     const r = (await window.agentcrew.testVoice('Prueba de voz AgentCrew.')) as {
       ok: boolean;
       source: string;
@@ -76,143 +140,153 @@ export function Settings() {
 
   return (
     <div
-      className="bg-zinc-900 p-4 text-sm text-zinc-100"
-      style={{ minHeight: '100vh', width: '100%', boxSizing: 'border-box' }}
+      className="flex flex-col bg-zinc-900 text-sm text-zinc-100"
+      style={{ height: '100vh', width: '100%', boxSizing: 'border-box' }}
     >
-      <h1 className="mb-3 text-lg font-semibold">Ajustes TTS</h1>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <h1 className="mb-3 text-lg font-semibold">Ajustes TTS</h1>
 
-      <label className="mb-3 block">
-        <span className="text-zinc-400">Pantalla de la franja</span>
-        <select
-          className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 p-2"
-          value={displayId ?? ''}
-          onChange={(e) => {
-            const v = e.target.value === '' ? null : Number(e.target.value);
-            const id = v == null || (primaryId != null && v === primaryId) ? null : v;
-            void window.agentcrew.setDisplay(id).then((raw) => {
-              setDisplays(raw.displays);
-              setDisplayId(raw.currentId);
-              setPrimaryId(raw.primaryId);
-              setStatus('Franja movida');
-            });
-          }}
-        >
-          {displays.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="mb-3 block">
-        <span className="text-zinc-400">Proveedor</span>
-        <select
-          className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 p-2"
-          value={s.provider}
-          onChange={(e) =>
-            setS({ ...s, provider: e.target.value as SettingsView['provider'] })
-          }
-        >
-          <option value="none">Ninguno (solo MP3 locales)</option>
-          <option value="fish">Fish Audio</option>
-          <option value="elevenlabs">ElevenLabs</option>
-        </select>
-      </label>
-
-      <label className="mb-3 flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={s.muted}
-          onChange={(e) => setS({ ...s, muted: e.target.checked })}
-        />
-        Silenciar
-      </label>
-
-      <label className="mb-3 block">
-        <span className="text-zinc-400">Volumen ({s.volume})</span>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={s.volume}
-          className="mt-1 w-full"
-          onChange={(e) => setS({ ...s, volume: Number(e.target.value) })}
-        />
-      </label>
-
-      {s.provider === 'fish' ? (
-        <div className="mb-3 space-y-2 rounded border border-zinc-700 p-3">
-          <div className="text-xs text-zinc-400">
-            Fish {s.hasFishKey ? '(key presente)' : '(sin key)'}
-          </div>
-          <p className="text-[11px] leading-snug text-zinc-500">
-            Fish REST autentica con API key (no OAuth). Abrí el portal, creá la key y
-            pegala acá. También: env <code className="text-zinc-400">FISH_API_KEY</code>.
-          </p>
-          <button
-            type="button"
-            className="w-full rounded bg-sky-700 px-3 py-2 text-sm hover:bg-sky-600"
-            onClick={async () => {
-              setStatus('Abriendo portal Fish…');
-              const r = await window.agentcrew.openFishPortal();
-              setStatus(r.ok ? 'Portal abierto — pegá la API key' : 'No se abrió portal');
+        <label className="mb-3 block">
+          <span className="text-zinc-400">Pantalla de la franja</span>
+          <select
+            className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 p-2"
+            value={displayId ?? ''}
+            onChange={(e) => {
+              const v = e.target.value === '' ? null : Number(e.target.value);
+              const id =
+                v == null || (primaryId != null && v === primaryId) ? null : v;
+              void window.agentcrew.setDisplay(id).then((raw) => {
+                setDisplays(raw.displays);
+                setDisplayId(raw.currentId);
+                setPrimaryId(raw.primaryId);
+                setStatus('Franja movida');
+              });
             }}
           >
-            Conectar Fish (portal)
-          </button>
-          <input
-            className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
-            placeholder="API key Fish"
-            value={s.fishApiKey}
-            onChange={(e) => setS({ ...s, fishApiKey: e.target.value })}
-          />
-          <input
-            className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
-            placeholder="reference_id / voz"
-            value={s.fishReferenceId}
-            onChange={(e) => setS({ ...s, fishReferenceId: e.target.value })}
-          />
-          <input
-            className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
-            placeholder="modelo"
-            value={s.fishModel}
-            onChange={(e) => setS({ ...s, fishModel: e.target.value })}
-          />
-        </div>
-      ) : null}
+            {displays.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
-      {s.provider === 'elevenlabs' ? (
-        <div className="mb-3 space-y-2 rounded border border-zinc-700 p-3">
-          <div className="text-xs text-zinc-400">
-            ElevenLabs {s.hasElevenKey ? '(key presente)' : '(sin key)'}
+        <label className="mb-3 block">
+          <span className="text-zinc-400">Proveedor</span>
+          <select
+            className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 p-2"
+            value={s.provider}
+            onChange={(e) =>
+              setS({ ...s, provider: e.target.value as SettingsView['provider'] })
+            }
+          >
+            <option value="none">Ninguno (solo MP3 locales)</option>
+            <option value="fish">Fish Audio</option>
+            <option value="elevenlabs">ElevenLabs</option>
+          </select>
+        </label>
+
+        <label className="mb-3 flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={s.muted}
+            onChange={(e) => setS({ ...s, muted: e.target.checked })}
+          />
+          Silenciar
+        </label>
+
+        <label className="mb-3 block">
+          <span className="text-zinc-400">Volumen ({s.volume})</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={s.volume}
+            className="mt-1 w-full"
+            onChange={(e) => setS({ ...s, volume: Number(e.target.value) })}
+          />
+        </label>
+
+        {s.provider === 'fish' ? (
+          <div className="mb-3 space-y-2 rounded border border-zinc-700 p-3">
+            <div className="text-xs text-zinc-400">
+              Fish {s.hasFishKey ? '(key presente)' : '(sin key)'}
+            </div>
+            <p className="text-[11px] leading-snug text-zinc-500">
+              Fish REST autentica con API key (no OAuth). Abrí el portal, creá la key y
+              pegala acá. Se guarda sola al pegar/editar; también con Guardar. Env:{' '}
+              <code className="text-zinc-400">FISH_API_KEY</code>.
+            </p>
+            <button
+              type="button"
+              className="w-full rounded bg-sky-700 px-3 py-2 text-sm hover:bg-sky-600"
+              onClick={async () => {
+                setStatus('Abriendo portal Fish…');
+                const r = await window.agentcrew.openFishPortal();
+                setStatus(
+                  r.ok ? 'Portal abierto — pegá la API key' : 'No se abrió portal',
+                );
+              }}
+            >
+              Conectar Fish (portal)
+            </button>
+            <input
+              className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
+              placeholder="API key Fish"
+              value={s.fishApiKey}
+              onChange={(e) => setS({ ...s, fishApiKey: e.target.value })}
+              onBlur={() => void save(true)}
+            />
+            <input
+              className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
+              placeholder="reference_id / voz"
+              value={s.fishReferenceId}
+              onChange={(e) => setS({ ...s, fishReferenceId: e.target.value })}
+            />
+            <input
+              className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
+              placeholder="modelo"
+              value={s.fishModel}
+              onChange={(e) => setS({ ...s, fishModel: e.target.value })}
+            />
           </div>
-          <input
-            className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
-            placeholder="API key ElevenLabs"
-            value={s.elevenApiKey}
-            onChange={(e) => setS({ ...s, elevenApiKey: e.target.value })}
-          />
-          <input
-            className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
-            placeholder="Voice ID"
-            value={s.elevenVoiceId}
-            onChange={(e) => setS({ ...s, elevenVoiceId: e.target.value })}
-          />
-          <input
-            className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
-            placeholder="modelo"
-            value={s.elevenModel}
-            onChange={(e) => setS({ ...s, elevenModel: e.target.value })}
-          />
-        </div>
-      ) : null}
+        ) : null}
 
-      <div className="flex gap-2">
+        {s.provider === 'elevenlabs' ? (
+          <div className="mb-3 space-y-2 rounded border border-zinc-700 p-3">
+            <div className="text-xs text-zinc-400">
+              ElevenLabs {s.hasElevenKey ? '(key presente)' : '(sin key)'}
+            </div>
+            <input
+              className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
+              placeholder="API key ElevenLabs"
+              value={s.elevenApiKey}
+              onChange={(e) => setS({ ...s, elevenApiKey: e.target.value })}
+              onBlur={() => void save(true)}
+            />
+            <input
+              className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
+              placeholder="Voice ID"
+              value={s.elevenVoiceId}
+              onChange={(e) => setS({ ...s, elevenVoiceId: e.target.value })}
+            />
+            <input
+              className="w-full rounded border border-zinc-700 bg-zinc-800 p-2"
+              placeholder="modelo"
+              value={s.elevenModel}
+              onChange={(e) => setS({ ...s, elevenModel: e.target.value })}
+            />
+          </div>
+        ) : null}
+
+        {status ? <p className="mb-2 text-xs text-zinc-400">{status}</p> : null}
+      </div>
+
+      <div className="flex shrink-0 gap-2 border-t border-zinc-700 bg-zinc-900 p-3">
         <button
           type="button"
           className="rounded bg-sky-600 px-3 py-2 font-medium hover:bg-sky-500"
-          onClick={() => void save()}
+          onClick={() => void save(false)}
         >
           Guardar
         </button>
@@ -224,7 +298,6 @@ export function Settings() {
           Probar voz
         </button>
       </div>
-      {status ? <p className="mt-3 text-xs text-zinc-400">{status}</p> : null}
     </div>
   );
 }

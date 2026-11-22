@@ -7,7 +7,7 @@ alwaysApply: true
 
 Repo: `AgentCrew`. Sidebar desktop: estado de agentes Cursor (hooks → estado → franja UI).
 
-Legacy referencia (no ampliar): `C:\Users\eomer\Downloads\panel-agentes`.
+Legacy PowerShell/WPF: solo referencia de comportamiento (ver `docs/02-legacy-powershell.md`). No ampliar ni asumir ruta local.
 
 ## Stack
 

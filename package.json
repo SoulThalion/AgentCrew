@@ -12,6 +12,7 @@
     "test": "npm run test -w @agentcrew/core && npm run test -w @agentcrew/hooks && npm run test -w @agentcrew/tts && npm run test -w @agentcrew/dock-windows",
     "typecheck": "npm run typecheck -w @agentcrew/core && npm run typecheck -w @agentcrew/hooks",
     "install-hooks": "npm run build -w @agentcrew/core && npm run build -w @agentcrew/hooks && node scripts/install-hooks.mjs",
+    "install-watch": "node scripts/install-cursor-watch.mjs",
     "install:all": "node installer/install.mjs",
     "panel": "npm run dev -w @agentcrew/panel",
     "panel:start": "npm run start -w @agentcrew/panel",

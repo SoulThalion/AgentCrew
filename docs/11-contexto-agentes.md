@@ -33,7 +33,7 @@ Leer también `docs/README.md` y `docs/estado.md`.
 ```
 Continúa AgentCrew (panel de agentes Cursor). Lee docs/README.md y docs/estado.md.
 Objetivo: [Fase 1 core | hooks Node | Electron UI | dock Win | …].
-Stack: Electron+React+TS monorepo. Legacy: C:\Users\eomer\Downloads\panel-agentes (solo referencia).
+Stack: Electron+React+TS monorepo. Legacy PowerShell solo referencia (docs/02-legacy-powershell.md).
 Responde en español. Caveman + QA gate.
 ```
 
@@ -41,7 +41,7 @@ Responde en español. Caveman + QA gate.
 
 | Rol | Ruta |
 |-----|------|
-| **Repo (este proyecto)** | `C:\Users\eomer\AgentCrew` |
-| Legacy referencia | `C:\Users\eomer\Downloads\panel-agentes` |
+| **Repo (este proyecto)** | raíz del clone (`AgentCrew/`) |
+| Legacy referencia | copia local opcional; no vive en el repo |
 
-Abrir **AgentCrew** en Cursor, no Downloads.
+Abrir el clone de **AgentCrew** en Cursor.

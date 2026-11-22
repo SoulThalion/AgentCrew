@@ -1,0 +1,48 @@
+# Watcher Cursor ↔ panel
+
+Cursor **no** expone hook “IDE abierto”. Para abrir/cerrar el sidebar con el IDE usamos un **watcher** de proceso.
+
+## Comportamiento
+
+| Evento | Qué pasa |
+|--------|----------|
+| Login Windows | Startup lanza `agentcrew-cursor-watch.mjs` (oculto) |
+| Aparece `Cursor.exe` | Watcher arranca el panel si no corre |
+| Desaparece Cursor (~10 s) | El **panel** hace `app.quit()` |
+| Vuelve a abrir Cursor | Watcher vuelve a arrancar el panel |
+
+El watcher **sigue vivo** sin Cursor (espera el próximo arranque del IDE).
+
+## Archivos
+
+| Ruta | Rol |
+|------|-----|
+| `~/.cursor/hooks/agentcrew-cursor-watch.mjs` | Loop poll ~2 s |
+| `~/.cursor/hooks/panel-launch.json` | Cómo lanzar Electron / `AgentCrew.exe` |
+| `~/…/Startup/AgentCrew-CursorWatch.vbs` | Autostart Windows |
+| `state/panel.pid` | PID del panel (¿ya corre?) |
+| `state/cursor-watch.pid` | PID del watcher (una sola instancia) |
+| `state/cerrar.txt` | Señal opcional → panel sale |
+| `state/watch-off.txt` | Desactiva follow (no auto-start / no auto-quit) |
+| `state/cursor-watch.log` | Log truncado del watcher |
+
+## Instalar
+
+```bash
+npm run install-watch
+# o: npm run install:all  (incluye watch)
+```
+
+Requisitos: `apps/panel/dist-electron/main.js` (dev) **o** `apps/panel/release/win-unpacked/AgentCrew.exe`.
+
+Si corres el panel desde `AgentCrew-cleanbuild`, el instalador lo detecta como fallback.
+
+## Desactivar
+
+1. Crear `~/.cursor/hooks/state/watch-off.txt` (vacío vale), **o**
+2. Borrar `AgentCrew-CursorWatch.vbs` del folder Startup, **o**
+3. Env `AGENTCREW_FOLLOW_CURSOR=0` (solo desactiva auto-quit del panel).
+
+## macOS / Linux
+
+Sin Startup VBS: añade al login `node ~/.cursor/hooks/agentcrew-cursor-watch.mjs`. Misma lógica `ps` / nombre `Cursor`.

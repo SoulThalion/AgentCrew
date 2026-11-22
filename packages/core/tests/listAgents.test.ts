@@ -13,6 +13,8 @@ import {
   clearRun,
   markSubagente,
   writeModo,
+  markVisto,
+  isVisto,
 } from '../src/index.js';
 
 describe('listAgents + stateStore', () => {
@@ -97,5 +99,31 @@ describe('listAgents + stateStore', () => {
     writeEstado(dir, 'viejo', 'trabajando', old);
     markRun(dir, 'viejo', old);
     expect(listAgents(dir, { now: new Date() }).map((a) => a.id)).not.toContain('viejo');
+  });
+
+  it('terminado sin leer → terminado', () => {
+    writeEstado(dir, 'fin1', 'terminado');
+    expect(listAgents(dir)[0]?.state).toBe('terminado');
+  });
+
+  it('terminado leído → detenido', () => {
+    writeEstado(dir, 'fin2', 'terminado');
+    markVisto(dir, 'fin2');
+    expect(isVisto(dir, 'fin2')).toBe(true);
+    expect(listAgents(dir)[0]?.state).toBe('detenido');
+  });
+
+  it('terminado abierto → atento y marca visto', () => {
+    writeEstado(dir, 'fin3', 'terminado');
+    const list = listAgents(dir, { focusedIds: ['fin3'] });
+    expect(list[0]?.state).toBe('atento');
+    expect(isVisto(dir, 'fin3')).toBe(true);
+  });
+
+  it('terminado leído + cerrado → detenido; reabrir → atento', () => {
+    writeEstado(dir, 'fin4', 'terminado');
+    markVisto(dir, 'fin4');
+    expect(listAgents(dir)[0]?.state).toBe('detenido');
+    expect(listAgents(dir, { focusedIds: ['fin4'] })[0]?.state).toBe('atento');
   });
 });

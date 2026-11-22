@@ -9,7 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import {
   defaultStateDir,
-  listAgents,
+  composeChats,
   type AgentSlot,
   STATE_COLORS,
   STATE_LABELS,
@@ -34,16 +34,28 @@ import { createTray, destroyTray, refreshTray } from './trayMenu';
 import { focusCursorWindow } from './focusCursor';
 import { openCursorChat } from './openChat';
 import { destroyHoverCard, hideHoverCard, showHoverCard } from './hoverCard';
-import { learnTitlesOnce } from './learnTitles';
+import {
+  getFocusedAgentIds,
+  getFocusedChatTitles,
+  getUiChatTitles,
+  learnTitlesOnce,
+  noteFocusedAgentId,
+} from './learnTitles';
+import { readUsoLabels, refreshCursorUsage } from './cursorUsage';
+import { announceUsoThresholds } from './usoAlerts';
+import { isCursorAlive } from './cursorAlive';
 import { pathToFileURL } from 'node:url';
 import { readTitulo, writeTitulo } from '@agentcrew/core';
 
 const STRIP_WIDTH = 72;
+/** Segundos sin Cursor IDE antes de auto-cerrar el panel (watcher lo reabre). */
+const CURSOR_GONE_GRACE_MS = 10_000;
 const gotLock = app.requestSingleInstanceLock();
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let cursorGoneSince = 0;
 let lastPayload = '';
 let ttsSettings: TtsSettings = { ...DEFAULT_TTS_SETTINGS };
 let panelPrefs: PanelPrefs = { displayId: null };
@@ -138,12 +150,27 @@ function speakPaths() {
   return { vocesDir: voces, cacheDir: cache };
 }
 
+/** Paridad Avisar-Umbral-Uso tras refrescar / leer uso.txt. */
+function maybeAnnounceUso(): void {
+  syncTtsFromState();
+  announceUsoThresholds(stateDir(), {
+    canSpeak: statePrefs.aviso === 'voz' && !statePrefs.muted,
+    speak: (phrase) => {
+      void resolveAndSpeak(phrase, ttsSettings, speakPaths());
+    },
+  });
+}
+
 function isDev(): boolean {
   return process.env.AGENTCREW_PANEL_DEV === '1';
 }
 
 function agentsPayload(): string {
-  const agents = listAgents(stateDir()).map((a: AgentSlot) => {
+  const agents = composeChats(stateDir(), {
+    uiTitles: getUiChatTitles(),
+    focusedTitles: getFocusedChatTitles(),
+    focusedIds: getFocusedAgentIds(),
+  }).map((a: AgentSlot) => {
     const state = a.state;
     const color =
       isAgentState(state) && STATE_COLORS[state]
@@ -162,9 +189,11 @@ function agentsPayload(): string {
       subagentCount: a.subagentCount,
       color,
       label,
+      focused: Boolean(a.focused),
     };
   });
-  return JSON.stringify({ agents, stateDir: stateDir() });
+  const uso = readUsoLabels(stateDir());
+  return JSON.stringify({ agents, stateDir: stateDir(), uso });
 }
 
 function pushAgents(force = false): void {
@@ -289,6 +318,27 @@ function listDisplaysPublic() {
   };
 }
 
+function panelPidPath(): string {
+  return path.join(stateDir(), 'panel.pid');
+}
+
+function writePanelPid(): void {
+  try {
+    fs.mkdirSync(stateDir(), { recursive: true });
+    fs.writeFileSync(panelPidPath(), String(process.pid), 'utf8');
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearPanelPid(): void {
+  try {
+    fs.unlinkSync(panelPidPath());
+  } catch {
+    /* ignore */
+  }
+}
+
 function consumeMostrar(): void {
   const file = path.join(stateDir(), 'mostrar.txt');
   try {
@@ -302,6 +352,36 @@ function consumeMostrar(): void {
   } catch {
     /* ignore */
   }
+}
+
+function consumeCerrar(): void {
+  const file = path.join(stateDir(), 'cerrar.txt');
+  try {
+    if (!fs.existsSync(file)) return;
+    fs.unlinkSync(file);
+    app.quit();
+  } catch {
+    /* ignore */
+  }
+}
+
+function followCursorEnabled(): boolean {
+  if (process.env.AGENTCREW_FOLLOW_CURSOR === '0') return false;
+  return !fs.existsSync(path.join(stateDir(), 'watch-off.txt'));
+}
+
+function checkCursorStillThere(): void {
+  if (!followCursorEnabled()) return;
+  void isCursorAlive().then((alive) => {
+    if (alive) {
+      cursorGoneSince = 0;
+      return;
+    }
+    if (!cursorGoneSince) cursorGoneSince = Date.now();
+    if (Date.now() - cursorGoneSince >= CURSOR_GONE_GRACE_MS) {
+      app.quit();
+    }
+  });
 }
 
 function consumeAjustes(): void {
@@ -423,6 +503,7 @@ function createWindow(): void {
 
   mainWindow.webContents.on('did-finish-load', () => {
     pushAgents(true);
+    void learnTitlesOnce(stateDir()).then(() => pushAgents(true));
     if (dockApi?.isAttached()) {
       setTimeout(() => dockApi?.reposition(), 100);
     }
@@ -435,16 +516,33 @@ function startWatchers(): void {
   pollTimer = setInterval(() => {
     pushAgents();
     consumeMostrar();
+    consumeCerrar();
     consumeAjustes();
     consumeSonar();
     // ~cada 2.4s: aprender títulos "Open agent …" de Cursor (async)
     learnTick++;
     if (learnTick % 3 === 0) {
-      void learnTitlesOnce(stateDir()).then((n) => {
-        if (n > 0) pushAgents(true);
+      void learnTitlesOnce(stateDir()).then(() => {
+        // Foco puede cambiar sin títulos nuevos → refrescar poses (atento/visto)
+        pushAgents(true);
       });
     }
+    // Uso Cursor ~cada 90s (throttle interno); refresca Inc/Otr del footer
+    if (learnTick % 4 === 0) {
+      void refreshCursorUsage(stateDir()).then((ok) => {
+        if (ok) pushAgents(true);
+        maybeAnnounceUso();
+      });
+    }
+    // ~cada 1.6s: si Cursor IDE no está, salir (watcher lo reabre al volver)
+    if (learnTick % 2 === 0) checkCursorStillThere();
   }, 800);
+
+  // Primera lectura de uso al arrancar
+  void refreshCursorUsage(stateDir()).then((ok) => {
+    if (ok) pushAgents(true);
+    maybeAnnounceUso();
+  });
 
   try {
     const dir = stateDir();
@@ -452,6 +550,7 @@ function startWatchers(): void {
     fs.watch(dir, { persistent: true }, () => {
       pushAgents();
       consumeMostrar();
+      consumeCerrar();
       consumeSonar();
     });
   } catch {
@@ -476,6 +575,12 @@ function registerIpc(): void {
             ? payload.trim()
             : '';
 
+      // Click = foco inmediato; visto solo si id real (no placeholder ui:)
+      if (id && !id.startsWith('ui:')) {
+        noteFocusedAgentId(id);
+        pushAgents(true);
+      }
+
       // Refrescar títulos UI antes de abrir (no bloquea UI: await en handler async)
       try {
         await learnTitlesOnce(stateDir());
@@ -491,6 +596,7 @@ function registerIpc(): void {
       if (result.ok && id && result.matchedTitle) {
         try {
           writeTitulo(stateDir(), id, result.matchedTitle);
+          noteFocusedAgentId(id);
           pushAgents(true);
         } catch {
           /* ignore */
@@ -538,6 +644,7 @@ function registerIpc(): void {
     if (patch.fishApiKey === '********') next.fishApiKey = ttsSettings.fishApiKey;
     if (patch.elevenApiKey === '********') next.elevenApiKey = ttsSettings.elevenApiKey;
     if (patch.fishApiKey === '') next.fishApiKey = '';
+    if (patch.elevenApiKey === '') next.elevenApiKey = '';
     if (patch.elevenApiKey === '') next.elevenApiKey = '';
     ttsSettings = next;
     saveSettings(ttsSettings);
@@ -628,6 +735,7 @@ if (!gotLock) {
     registerIpc();
     createWindow();
     createTray(trayHooks());
+    writePanelPid();
     startWatchers();
     screen.on('display-added', () => applyDockMonitor());
     screen.on('display-removed', () => {
@@ -649,6 +757,7 @@ if (!gotLock) {
   });
 
   app.on('before-quit', () => {
+    clearPanelPid();
     try {
       dockApi?.detach();
     } catch {

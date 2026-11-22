@@ -16,7 +16,7 @@ Responde en español. Caveman activo. No inventes estados ni contrato de archivo
 - `packages/dock-windows` | `dock-macos` | `dock-linux` — solo dock
 - Estado en `~/.cursor/hooks/state/`
 
-Legacy PowerShell = `C:\Users\eomer\Downloads\panel-agentes` (solo referencia; ver `docs/02-legacy-powershell.md`). No ampliarlo.
+Legacy PowerShell = solo referencia local opcional (ver `docs/02-legacy-powershell.md`). No ampliarlo ni asumirlo en el repo.
 
 Audio: `voces/` + `@agentcrew/tts` + Settings Fish/ElevenLabs. Hooks → `sonar-*.txt` → panel. Ver `docs/12-tts-proveedores.md`.
 

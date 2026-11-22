@@ -5,3 +5,4 @@ export * from './atomicWrite.js';
 export * from './phraseHash.js';
 export * from './stateStore.js';
 export * from './listAgents.js';
+export * from './composeChats.js';

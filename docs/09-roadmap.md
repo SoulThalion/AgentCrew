@@ -46,6 +46,10 @@
 - [x] Fish portal (API key; sin OAuth REST)
 - [x] Empaquetado electron-builder (.exe nsis + portable)
 
+## Post-MVP
+
+- [x] Watcher abrir/cerrar panel con IDE Cursor (`15-cursor-watch.md`)
+
 ## Prioridad próximo chat
 
 1. Focus Cursor Mac/Linux

@@ -1,10 +1,10 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-21
+Última actualización: 2026-11-22
 
 ## Hecho
 
-- [x] Análisis legacy PowerShell/WPF — `Downloads/panel-agentes`
+- [x] Análisis legacy PowerShell/WPF — ver `02-legacy-powershell.md`
 - [x] Repo **AgentCrew** + docs/rules/skills
 - [x] Stack Electron + React + TS + Vite + Tailwind
 - [x] **Fase 1** `@agentcrew/core` + tests
@@ -27,7 +27,7 @@
 
 ## Bloqueos / abiertos
 
-- [x] Repo = AgentCrew; legacy = Downloads/panel-agentes
+- [x] Repo = AgentCrew; legacy fuera del repo (`02-legacy-powershell.md`)
 - [x] TTS multi-proveedor documentado (D10)
 - [x] Personajes canvas (CharacterFace poses/formas)
 - [x] Fish portal + API key (OAuth REST no existe)
@@ -37,6 +37,13 @@
 - [x] Título UI = prompt/titulo (no UUID); stop raro → detenido; run no revive stale
 - [x] Click agente async (no congela AppBar); FindAll + match fuzzy; guarda titulo-*
 - [x] Títulos UI vía TabItem `, Chat Editors` (Cursor actual; ya no `Open agent`)
+- [x] Franja = chats UI; sin duplicar activo+terminado mismo título (`composeChats`)
+- [x] learnTitles: no cruzar foco UI con otro agente activo; títulos sticky si chat abierto
+- [x] pickOne: varios mismo título → unread terminado visible (no placeholder detenido)
+- [x] Activo con título sticky duplicado → rellena UI libre (MiraiWay no detenido)
+- [x] Footer Inc/Otr: no tumbar refresh si `usage-summary` 401 (periodo basta)
+- [x] Avisos voz umbrales uso (50/65/80/90/95/100) + `uso-avisos.txt`
+- [x] Watcher Cursor↔panel (Startup + auto-quit) — `docs/15-cursor-watch.md`
 - [ ] Focus Cursor Mac/Linux
 - [ ] QA subagente (límite modelo)
 

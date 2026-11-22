@@ -29,6 +29,10 @@ export function fileTitulo(stateDir: string, id: string): string {
   return path.join(stateDir, `titulo-${safeId(id)}.txt`);
 }
 
+export function fileVisto(stateDir: string, id: string): string {
+  return path.join(stateDir, `visto-${safeId(id)}.txt`);
+}
+
 export function fileUltima(stateDir: string, id: string): string {
   return path.join(stateDir, `ultima-${safeId(id)}.txt`);
 }

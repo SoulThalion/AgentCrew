@@ -18,7 +18,7 @@ AgentCrew/                 # este repo
   hooks.json
 ```
 
-Legacy PS permanece fuera: `Downloads/panel-agentes` (ver `02-legacy-powershell.md`).
+Legacy PS permanece fuera del repo (ver `02-legacy-powershell.md`).
 
 ## Procesos
 
@@ -36,7 +36,8 @@ flowchart LR
 | Proceso | Responsabilidad |
 |---------|-----------------|
 | Hook CLI | Corto; escribe state; audio: `voces/` → Fish → fallback |
-| Electron main | Ventana franja, dock, single-instance, focus Cursor, IPC |
+| Cursor watch | Poll IDE; arranca panel si Cursor vive (ver `15-cursor-watch.md`) |
+| Electron main | Ventana franja, dock, single-instance, focus Cursor, IPC; sale si Cursor muere |
 | Preload | API tipada mínima al renderer |
 | Renderer | Personajes / lista / click |
 

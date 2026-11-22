@@ -52,11 +52,13 @@ run('npm', ['install']);
 copyVoces();
 run('npm', ['run', 'build']);
 run('node', ['scripts/install-hooks.mjs']);
+run('node', ['scripts/install-cursor-watch.mjs']);
 
 const startPanel = process.argv.includes('--panel');
 if (startPanel) {
   run('npm', ['run', 'start', '-w', '@agentcrew/panel']);
 } else {
-  console.log('Listo. Reinicia Cursor. Panel: npm run start -w @agentcrew/panel');
+  console.log('Listo. Reinicia Cursor (o ábrelo): el watcher levantará el panel.');
+  console.log('Manual: npm run start -w @agentcrew/panel');
   console.log('O: node installer/install.mjs --panel');
 }

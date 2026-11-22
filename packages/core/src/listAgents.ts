@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isAgentState, isActiveStale, priorityOf, type AgentState } from './states.js';
 import {
+  applyDisplayPose,
   countSubagentes,
   displayTitle,
   parseEstadoLine,
@@ -18,12 +19,20 @@ export type AgentSlot = {
   order: number;
   subagentCount: number;
   ageMs: number;
+  focused?: boolean;
 };
 
 export type ListAgentsOptions = {
   now?: Date;
   /** Si true, borra estado-*.txt con edad ≥ 24 h (legado). Default false en tests. */
   pruneOlderThan24h?: boolean;
+  /** Ids de chats con foco UI (tab seleccionado). */
+  focusedIds?: string[];
+  /**
+   * Si false, no aplica visto→detenido / foco→atento (estado crudo).
+   * Default true.
+   */
+  applyPose?: boolean;
 };
 
 function isPlainTxt(name: string): boolean {
@@ -36,6 +45,8 @@ function isPlainTxt(name: string): boolean {
 export function listAgents(stateDir: string, opts: ListAgentsOptions = {}): AgentSlot[] {
   const now = opts.now ?? new Date();
   const prune = opts.pruneOlderThan24h ?? false;
+  const focused = new Set((opts.focusedIds ?? []).filter(Boolean));
+  const applyPose = opts.applyPose !== false;
   const lista: AgentSlot[] = [];
   const seen = new Set<string>();
 
@@ -73,16 +84,21 @@ export function listAgents(stateDir: string, opts: ListAgentsOptions = {}): Agen
     }
 
     if (isAgentState(valor) && isActiveStale(valor, ageHours)) {
-      // Marcar visto: si no, el loop run-* revive el chat como "trabajando"
+      // Evitar que loop run-* revive chat stale como "trabajando"
       seen.add(id);
       continue;
     }
 
-    let order = 5;
-    if (isAgentState(valor)) order = priorityOf(valor);
+    const enfocado = focused.has(id);
+    const pose = applyPose
+      ? applyDisplayPose(stateDir, id, valor, enfocado)
+      : {
+          state: valor,
+          order: isAgentState(valor) ? priorityOf(valor) : 5,
+        };
 
     let subagentCount = 0;
-    if (valor === 'subagentes') {
+    if (pose.state === 'subagentes' || valor === 'subagentes') {
       subagentCount = countSubagentes(stateDir, id);
       if (subagentCount < 1) subagentCount = 2;
     }
@@ -90,12 +106,13 @@ export function listAgents(stateDir: string, opts: ListAgentsOptions = {}): Agen
     seen.add(id);
     lista.push({
       id,
-      state: valor,
+      state: pose.state,
       title: displayTitle(stateDir, id),
       phrase: readFrase(stateDir, id),
-      order,
+      order: pose.order,
       subagentCount,
       ageMs,
+      focused: enfocado,
     });
   }
 
@@ -110,17 +127,23 @@ export function listAgents(stateDir: string, opts: ListAgentsOptions = {}): Agen
     const ageHours = ageMs / 3_600_000;
     const valor = resolveActiveState(stateDir, id, '');
     if (isAgentState(valor) && isActiveStale(valor, ageHours)) continue;
-    let order = 5;
-    if (isAgentState(valor)) order = priorityOf(valor);
+    const enfocado = focused.has(id);
+    const pose = applyPose
+      ? applyDisplayPose(stateDir, id, valor, enfocado)
+      : {
+          state: valor,
+          order: isAgentState(valor) ? priorityOf(valor) : 5,
+        };
 
     lista.push({
       id,
-      state: valor,
+      state: pose.state,
       title: displayTitle(stateDir, id),
       phrase: readFrase(stateDir, id),
-      order,
+      order: pose.order,
       subagentCount: 0,
       ageMs,
+      focused: enfocado,
     });
   }
 

@@ -16,5 +16,6 @@ export function phraseFor(tipo: string): string {
 }
 
 export function knownPhrases(): string[] {
+  // Uso (umbrales) se exporta aparte vía knownUsagePhrases; precache installer puede unir ambos.
   return Object.values(PHRASES);
 }

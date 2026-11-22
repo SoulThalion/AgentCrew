@@ -13,6 +13,7 @@ import {
   fileSubagente,
   fileTitulo,
   fileUltima,
+  fileVisto,
   prefixSubagentes,
 } from './paths.js';
 import { writeAtomic, readText, removeFile } from './atomicWrite.js';
@@ -22,6 +23,7 @@ import {
   type ComposerMode,
   isAgentState,
   parseComposerMode,
+  priorityOf,
 } from './states.js';
 
 const PROMPT_MAX = 180;
@@ -222,6 +224,47 @@ export function resolveActiveState(
   const modo = readModo(stateDir, id);
   if (modo === 'plan') return 'planificando';
   return 'trabajando';
+}
+
+/** Paridad Marcar-Visto / Esta-Visto legacy. */
+export function markVisto(stateDir: string, id: string): void {
+  if (!id.trim()) return;
+  ensureStateDir(stateDir);
+  writeAtomic(fileVisto(stateDir, id), '1', 'utf8');
+}
+
+export function isVisto(stateDir: string, id: string): boolean {
+  if (!id.trim()) return false;
+  const vistoPath = fileVisto(stateDir, id);
+  const estadoPath = fileEstado(stateDir, id);
+  if (!fs.existsSync(vistoPath) || !fs.existsSync(estadoPath)) return false;
+  return fs.statSync(vistoPath).mtimeMs >= fs.statSync(estadoPath).mtimeMs;
+}
+
+/**
+ * Pose de franja (Pose-Vista + foco legacy):
+ * terminado/error leído → detenido; abierto + terminado|detenido → atento.
+ */
+export function applyDisplayPose(
+  stateDir: string,
+  id: string,
+  valor: string,
+  focused: boolean,
+): { state: string; order: number } {
+  if (focused && (valor === 'terminado' || valor === 'error')) {
+    markVisto(stateDir, id);
+  }
+  let state = valor;
+  let order = isAgentState(state) ? priorityOf(state) : 5;
+  if ((state === 'terminado' || state === 'error') && isVisto(stateDir, id)) {
+    state = 'detenido';
+    order = 4;
+  }
+  if (focused && (state === 'terminado' || state === 'detenido')) {
+    state = 'atento';
+    order = 0;
+  }
+  return { state, order };
 }
 
 export function assertState(value: string): AgentState {

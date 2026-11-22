@@ -32,16 +32,31 @@ function eye(
   ctx.fill();
 }
 
+/**
+ * Ojos arco (Anadir-Arco legacy).
+ * terminado = 'arriba' (WPF Clockwise) → ∩
+ * detenido  = 'abajo'  (WPF Counterclockwise) → ∪
+ * Canvas y↓: Clockwise WPF ≠ clockwise canvas; se calculan centros reales.
+ */
 function arcEyes(ctx: CanvasRenderingContext2D, up: boolean): void {
   ctx.strokeStyle = '#FFFFFF';
   ctx.lineWidth = 2.8;
   ctx.lineCap = 'round';
+  const r = 6;
+  const half = 5;
+  const dy = Math.sqrt(r * r - half * half);
   for (const [x1, x2] of [
     [4, 14],
     [18, 28],
   ] as const) {
+    const cx = (x1 + x2) / 2;
+    // arriba → centro debajo del acorde; abajo → centro encima
+    const cy = up ? 18 + dy : 18 - dy;
+    const a1 = Math.atan2(18 - cy, x1 - cx);
+    const a2 = Math.atan2(18 - cy, x2 - cx);
     ctx.beginPath();
-    ctx.arc((x1 + x2) / 2, 18, 6, up ? Math.PI : 0, up ? 0 : Math.PI, !up);
+    // up → SweepDirection Clockwise (WPF) ≈ canvas counterclockwise=false vía a1→a2
+    ctx.arc(cx, cy, r, a1, a2, !up);
     ctx.stroke();
   }
 }
