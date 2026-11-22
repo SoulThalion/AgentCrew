@@ -44,6 +44,12 @@ import {
 import { readUsoLabels, refreshCursorUsage } from './cursorUsage';
 import { announceUsoThresholds } from './usoAlerts';
 import { isCursorAlive } from './cursorAlive';
+import {
+  createAllDoneTracker,
+  noteDoneSonars,
+  noteWorkingCount,
+  takeAllDoneAnnounce,
+} from './allDoneAviso';
 import { pathToFileURL } from 'node:url';
 import { readTitulo, writeTitulo } from '@agentcrew/core';
 
@@ -58,6 +64,21 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let cursorGoneSince = 0;
 let lastPayload = '';
 let ttsSettings: TtsSettings = { ...DEFAULT_TTS_SETTINGS };
+const allDoneTracker = createAllDoneTracker();
+let speakChain: Promise<void> = Promise.resolve();
+
+function enqueueSpeak(fn: () => Promise<unknown>): void {
+  speakChain = speakChain.then(() => fn()).then(() => undefined).catch(() => undefined);
+}
+
+function countRunFiles(dir: string): number {
+  if (!fs.existsSync(dir)) return 0;
+  let n = 0;
+  for (const name of fs.readdirSync(dir)) {
+    if (name.startsWith('run-') && name.endsWith('.txt')) n++;
+  }
+  return n;
+}
 let panelPrefs: PanelPrefs = { displayId: null };
 let statePrefs: PanelStatePrefs = loadStatePrefsFallback();
 let dockApi: {
@@ -399,16 +420,31 @@ function consumeSonar(): void {
   const dir = stateDir();
   if (!fs.existsSync(dir)) return;
   syncTtsFromState();
+  const tipos: string[] = [];
   for (const name of fs.readdirSync(dir)) {
     if (!name.startsWith('sonar-') || !name.endsWith('.txt')) continue;
     const full = path.join(dir, name);
     try {
       const tipo = fs.readFileSync(full, 'utf8').trim() || 'fin';
       fs.unlinkSync(full);
-      void speakTipo(tipo, ttsSettings, speakPaths(), statePrefs.aviso);
+      tipos.push(tipo);
     } catch {
       /* ignore */
     }
+  }
+  const working = countRunFiles(dir);
+  noteWorkingCount(allDoneTracker, working);
+  noteDoneSonars(allDoneTracker, tipos);
+  for (const tipo of tipos) {
+    enqueueSpeak(() =>
+      speakTipo(tipo, ttsSettings, speakPaths(), statePrefs.aviso),
+    );
+  }
+  // Último aviso de lote: varios agentes acabaron y usuario inactivo (o "siempre")
+  if (takeAllDoneAnnounce(allDoneTracker, working, statePrefs.cuando)) {
+    enqueueSpeak(() =>
+      speakTipo('todos', ttsSettings, speakPaths(), statePrefs.aviso),
+    );
   }
 }
 
@@ -518,6 +554,7 @@ function startWatchers(): void {
     consumeMostrar();
     consumeCerrar();
     consumeAjustes();
+    noteWorkingCount(allDoneTracker, countRunFiles(stateDir()));
     consumeSonar();
     // ~cada 2.4s: aprender títulos "Open agent …" de Cursor (async)
     learnTick++;

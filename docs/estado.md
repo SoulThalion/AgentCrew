@@ -41,6 +41,7 @@
 - [x] learnTitles: no cruzar foco UI con otro agente activo; títulos sticky si chat abierto
 - [x] pickOne: varios mismo título → unread terminado visible (no placeholder detenido)
 - [x] Activo con título sticky duplicado → rellena UI libre (MiraiWay no detenido)
+- [x] Aviso lote: `todos` + MP3 `frase-41fe2b948184f7e8.mp3` (Fish) si multi acaba e idle
 - [x] Footer Inc/Otr: no tumbar refresh si `usage-summary` 401 (periodo basta)
 - [x] Avisos voz umbrales uso (50/65/80/90/95/100) + `uso-avisos.txt`
 - [x] Watcher Cursor↔panel (Startup + auto-quit) — `docs/15-cursor-watch.md`

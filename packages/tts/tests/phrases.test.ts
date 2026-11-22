@@ -6,6 +6,7 @@ describe('tts phrases', () => {
   it('phraseFor devuelve texto', () => {
     expect(phraseFor('fin').length).toBeGreaterThan(0);
     expect(phraseFor('pregunta').length).toBeGreaterThan(0);
+    expect(phraseFor('todos')).toBe('Señor, todos los agentes han terminado.');
   });
 
   it('known phrases tienen hash estable', () => {

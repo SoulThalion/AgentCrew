@@ -9,6 +9,8 @@ const PHRASES: Record<string, string> = {
   aprobacion: 'Señor, necesito su aprobación para ejecutar este comando.',
   busqueda: 'Señor, necesito su aprobación para buscar en internet.',
   plan: 'Señor, he terminado de implementar el plan.',
+  /** Varios agentes: último aviso si el usuario sigue inactivo. */
+  todos: 'Señor, todos los agentes han terminado.',
 };
 
 export function phraseFor(tipo: string): string {
