@@ -119,22 +119,44 @@ describe('composeChats', () => {
     expect(list[0]?.state).toBe('atento');
   });
 
-  it('activo con título duplicado rellena UI libre (no placeholder detenido)', () => {
+  it('fuzzy prompt↔UI asigna activo; sticky malo no pinta tab idle', () => {
     writeEstado(dir, 'proj', 'trabajando');
     writeTitulo(dir, 'proj', 'Project');
+    writePrompt(dir, 'proj', 'Project');
     writeEstado(dir, 'mirai', 'trabajando');
     writeTitulo(dir, 'mirai', 'Project'); // sticky malo
+    writePrompt(dir, 'mirai', 'MiraiWay phase 4 implement');
     const list = composeChats(dir, {
       uiTitles: ['MiraiWay phase 4', 'Project'],
       focusedTitles: ['Project'],
     });
     const mirai = list.find((a) => a.title === 'MiraiWay phase 4');
     const proj = list.find((a) => a.title === 'Project');
+    expect(mirai?.id).toBe('mirai');
     expect(mirai?.state).toBe('trabajando');
-    expect(mirai?.id === 'proj' || mirai?.id === 'mirai').toBe(true);
+    expect(proj?.id).toBe('proj');
     expect(proj?.state).toBe('trabajando');
-    expect(proj?.id).not.toBe(mirai?.id);
-    expect(list.filter((a) => a.id.startsWith('ui:'))).toHaveLength(0);
+  });
+
+  it('issue #3: activo sin sticky no se pinta en tab fijado idle', () => {
+    writeEstado(dir, 'jira', 'trabajando');
+    writePrompt(dir, 'jira', 'Analiza el ticket de Jira 4224');
+    // sin titulo sticky
+    writeEstado(dir, 'mem', 'terminado');
+    writeTitulo(dir, 'mem', 'Codebase Memory MCP usage');
+    clearRun(dir, 'mem');
+    const list = composeChats(dir, {
+      uiTitles: [
+        'Codebase Memory MCP usage, anclado',
+        'Jira ticket 4224 analysis',
+      ],
+      focusedTitles: ['Codebase Memory MCP usage, anclado'],
+    });
+    const pinned = list.find((a) => a.title.includes('Codebase Memory'));
+    const jira = list.find((a) => a.title.includes('Jira'));
+    expect(pinned?.state).not.toBe('trabajando');
+    expect(jira?.id).toBe('jira');
+    expect(jira?.state).toBe('trabajando');
   });
 
   it('issue #2: 3 sticky iguales + prompts distintos → un slot por tab, sin cruzar', () => {

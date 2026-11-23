@@ -74,6 +74,33 @@ describe('handleEvent', () => {
     expect(fs.existsSync(path.join(dir, 'run-s2.txt'))).toBe(false);
   });
 
+  it('stop error → pending sin sonar; re-prompt cancela (error seguido)', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'e1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'stop',
+      JSON.stringify({ conversation_id: 'e1', status: 'error' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'error-pending-e1.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'sonar-e1.txt'))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, 'estado-e1.txt'), 'utf8').startsWith('detenido|')).toBe(
+      true,
+    );
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'e1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'error-pending-e1.txt'))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, 'estado-e1.txt'), 'utf8').startsWith('trabajando|')).toBe(
+      true,
+    );
+  });
+
   it('leyendo solo si trabajando', () => {
     handleEvent(
       'prompt',

@@ -15,6 +15,7 @@ import {
   readText,
   filePrompt,
   resolveFocusedIds,
+  fuzzyTitleMatch,
 } from '@agentcrew/core';
 
 let busy = false;
@@ -445,6 +446,27 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
   let freeUi = uiTitles.filter((t) => !claimed.has(norm(t)));
   if (freeUi.length === 1 && orphans.length === 1) {
     assign(orphans[0]!.id, freeUi[0]!);
+  } else {
+    // 1 activo huérfano + UI libre fuzzy → sticky ahí (nunca al primer fijado por orden)
+    const ACTIVE_STATES = new Set([
+      'trabajando',
+      'planificando',
+      'leyendo',
+      'esperando',
+      'subagentes',
+    ]);
+    const activeOrphans = orphans.filter((c) => {
+      const ag = agents.find((x) => x.id === c.id);
+      return ag && ACTIVE_STATES.has(String(ag.state));
+    });
+    for (const c of activeOrphans) {
+      if (!c.promptN || used.has(c.id)) continue;
+      const hits = freeUi.filter((t) => fuzzyTitleMatch(c.promptN, t));
+      if (hits.length !== 1) continue;
+      if (assign(c.id, hits[0]!)) {
+        freeUi = freeUi.filter((t) => norm(t) !== norm(hits[0]!));
+      }
+    }
   }
 
   // Sticky duplicado: keeper (prompt exact / used / activo) + surplus → freeUi o clear

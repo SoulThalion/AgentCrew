@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   clearAprobacion,
   clearBusqueda,
+  clearErrorPending,
   clearRun,
   clearShell,
   clearSubagentes,
@@ -14,6 +15,7 @@ import {
   hasRun,
   markAprobacion,
   markBusqueda,
+  markErrorPending,
   markRun,
   markShell,
   markSubagente,
@@ -89,6 +91,7 @@ function clearSessionFiles(stateDir: string, id: string): void {
   clearRun(stateDir, id);
   clearShell(stateDir, id);
   clearSubagentes(stateDir, id);
+  clearErrorPending(stateDir, id);
 }
 
 export function handleEvent(
@@ -117,6 +120,9 @@ export function handleEvent(
         if (id) {
           writePrompt(stateDir, id, field(raw, 'prompt'));
           removeFile(fileUltima(stateDir, id));
+          // Reintento tras stop/error espurio → cancela “error seguido”
+          clearErrorPending(stateDir, id);
+          removeFile(path.join(stateDir, `sonar-${safeId(id)}.txt`));
           const modo = readModo(stateDir, id);
           writeEstado(stateDir, id, modo === 'plan' ? 'planificando' : 'trabajando');
           if (modo === 'agent' || !modo) {
@@ -252,12 +258,17 @@ export function handleEvent(
         clearBusqueda(stateDir, id);
         let tipoSonar = '';
         if (status === 'completed' || status === 'success') {
+          clearErrorPending(stateDir, id);
           writeEstado(stateDir, id, 'terminado');
           tipoSonar = 'fin';
         } else if (status === 'error' || status === 'failed') {
-          writeEstado(stateDir, id, 'error');
-          tipoSonar = 'error';
+          // Cursor a veces emite error + re-prompt inmediato. Sonar solo tras grace
+          // (panel confirma error-pending ~6 s; legado “error seguido”).
+          markErrorPending(stateDir, id);
+          writeEstado(stateDir, id, 'detenido');
+          // no sonar aquí
         } else {
+          clearErrorPending(stateDir, id);
           // aborted / cancelled / vacío / desconocido → detenido (no dejar trabajando)
           writeEstado(stateDir, id, 'detenido');
         }

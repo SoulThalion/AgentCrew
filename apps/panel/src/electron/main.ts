@@ -437,9 +437,58 @@ function consumeAjustes(): void {
   }
 }
 
+/** stop/error espurio → sonar solo si no hubo re-prompt (~6 s). */
+function confirmPendingErrors(): void {
+  const dir = stateDir();
+  if (!fs.existsSync(dir)) return;
+  const now = Date.now();
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.startsWith('error-pending-') || !name.endsWith('.txt')) continue;
+    const id = name.slice('error-pending-'.length, -'.txt'.length);
+    const full = path.join(dir, name);
+    let at = 0;
+    try {
+      at = Number.parseInt(fs.readFileSync(full, 'utf8').trim(), 10);
+    } catch {
+      continue;
+    }
+    if (!Number.isFinite(at) || now - at < 6_000) continue;
+    try {
+      fs.unlinkSync(full);
+    } catch {
+      /* ignore */
+    }
+    // Re-prompt → run-* vuelve; chat siguió → no avisar
+    if (fs.existsSync(path.join(dir, `run-${id}.txt`))) continue;
+    try {
+      const est = fs.readFileSync(path.join(dir, `estado-${id}.txt`), 'utf8');
+      const st = est.split('|')[0]?.trim() ?? '';
+      if (
+        st === 'trabajando' ||
+        st === 'planificando' ||
+        st === 'leyendo' ||
+        st === 'esperando' ||
+        st === 'subagentes'
+      ) {
+        continue;
+      }
+    } catch {
+      /* sin estado → confirmar error */
+    }
+    try {
+      const line = `error|${new Date().toISOString()}`;
+      fs.writeFileSync(path.join(dir, `estado-${id}.txt`), line, 'utf8');
+      fs.writeFileSync(path.join(dir, `sonar-${id}.txt`), 'error', 'utf8');
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 function consumeSonar(): void {
   const dir = stateDir();
   if (!fs.existsSync(dir)) return;
+  confirmPendingErrors();
   syncTtsFromState();
   const tipos: string[] = [];
   for (const name of fs.readdirSync(dir)) {

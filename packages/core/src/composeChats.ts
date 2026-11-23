@@ -23,9 +23,38 @@ export function normalizeTitle(s: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
+    .replace(/,?\s*anclado\s*$/i, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function tokensOf(norm: string): string[] {
+  return norm.split(/\s+/).filter((t) => t.length >= 2 || /^\d+$/.test(t));
+}
+
+/**
+ * Prompt ↔ título UI sin igualdad exacta (ej. "Analiza ticket Jira 4224"
+ * vs "Jira ticket 4224 analysis").
+ */
+export function fuzzyTitleMatch(promptOrTitleA: string, titleB: string): boolean {
+  const a = normalizeTitle(promptOrTitleA);
+  const b = normalizeTitle(titleB);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const ta = tokensOf(a);
+  const tb = tokensOf(b);
+  const digA = ta.filter((t) => /^\d{3,}$/.test(t));
+  const digB = tb.filter((t) => /^\d{3,}$/.test(t));
+  if (digA.length > 0 && digB.length > 0) {
+    if (!digA.some((d) => digB.includes(d))) return false;
+  }
+  const shared = tb.filter((t) => ta.includes(t) && t.length >= 3);
+  if (shared.some((t) => t.length >= 5)) return true;
+  if (shared.length >= 2) return true;
+  if (digA.length > 0 && digB.length > 0 && shared.length >= 1) return true;
+  return false;
 }
 
 function readPromptNorm(stateDir: string, id: string): string {
@@ -152,6 +181,7 @@ export function composeChats(
     const title = uiTitles[i]!;
     const clave = normalizeTitle(title);
     const byPrompt: AgentSlot[] = [];
+    const byFuzzy: AgentSlot[] = [];
     const byTitulo: AgentSlot[] = [];
     for (const a of rawAgents) {
       if (used.has(a.id)) continue;
@@ -161,9 +191,16 @@ export function composeChats(
         continue;
       }
       const tit = normalizeTitle(readTitulo(stateDir, a.id));
-      if (tit && tit === clave) byTitulo.push(a);
+      if (tit && tit === clave) {
+        byTitulo.push(a);
+        continue;
+      }
+      if (prompt && fuzzyTitleMatch(prompt, clave)) byFuzzy.push(a);
     }
-    const elegido = pickOne(stateDir, byPrompt) ?? pickOne(stateDir, byTitulo);
+    const elegido =
+      pickOne(stateDir, byPrompt) ??
+      pickOne(stateDir, byTitulo) ??
+      pickOne(stateDir, byFuzzy);
     if (elegido) {
       used.add(elegido.id);
       assigned.set(i, elegido);
@@ -190,40 +227,24 @@ export function composeChats(
     consumeInactiveSiblings(normalizeTitle(uiTitles[i]!));
   }
 
-  // UI sin match: primero por prompt; luego surplus sticky duplicado / activos libres
+  // UI sin match: solo prompt exacto / fuzzy. NUNCA meter activo en tab idle fijado.
   const stillUnmatched = uiTitles
     .map((_, i) => i)
     .filter((i) => !assigned.has(i));
   if (stillUnmatched.length > 0) {
-    const assignedTitulos = new Set<string>();
-    for (const a of assigned.values()) {
-      const t = normalizeTitle(readTitulo(stateDir, a.id));
-      if (t) assignedTitulos.add(t);
-    }
     const unused = rawAgents.filter((a) => !used.has(a.id));
-    const unusedActive = unused.filter((a) => ACTIVE.has(String(a.state)));
-    const surplus = unusedActive.filter((a) => {
-      const t = normalizeTitle(readTitulo(stateDir, a.id));
-      return Boolean(t && assignedTitulos.has(t));
-    });
-    const pool = [...(surplus.length > 0 ? surplus : unusedActive)].sort(
-      (a, b) => a.ageMs - b.ageMs,
-    );
     for (const i of stillUnmatched) {
       if (assigned.has(i)) continue;
       const clave = normalizeTitle(uiTitles[i]!);
-      // Prompt exacto (activo o no) gana a surplus aleatorio → evita estados cruzados
       const byPrompt = unused.find(
         (a) => !used.has(a.id) && readPromptNorm(stateDir, a.id) === clave,
       );
-      let pick = byPrompt ?? null;
-      if (!pick) {
-        const idx = pool.findIndex((a) => !used.has(a.id));
-        if (idx >= 0) pick = pool.splice(idx, 1)[0] ?? null;
-      } else {
-        const pi = pool.findIndex((a) => a.id === pick!.id);
-        if (pi >= 0) pool.splice(pi, 1);
-      }
+      const byFuzzy = unused.find(
+        (a) =>
+          !used.has(a.id) &&
+          fuzzyTitleMatch(readPromptNorm(stateDir, a.id), clave),
+      );
+      const pick = byPrompt ?? byFuzzy ?? null;
       if (!pick) continue;
       used.add(pick.id);
       assigned.set(i, pick);

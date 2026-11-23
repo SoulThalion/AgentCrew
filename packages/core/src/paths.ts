@@ -49,6 +49,11 @@ export function fileShell(stateDir: string, id: string): string {
   return path.join(stateDir, `shell-${safeId(id)}.txt`);
 }
 
+/** stop/error espurio → confirmar ~6 s (legado “error seguido”). */
+export function fileErrorPending(stateDir: string, id: string): string {
+  return path.join(stateDir, `error-pending-${safeId(id)}.txt`);
+}
+
 export function prefixSubagentes(id: string): string {
   return `sub-${safeId(id)}-`;
 }

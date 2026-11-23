@@ -52,6 +52,7 @@
 - [x] Issue #1: grace 12s + fail-open `isCursorAlive` (no bucle quit bajo carga)
 - [x] Issue #1 RSS: dock place no-op si rect igual + debounce POSCHANGED; idleWin koffi (sin PS)
 - [x] Issue #2: sticky unico + compose no cruza hermanos (prompt→otro tab)
+- [x] Issue #3: error-pending 6s (no falso sonar) + compose fuzzy / sin fill tab idle
 - [x] RAM main: hover sin loadURL repetido; dock place solo ABN_POSCHANGED; tasklist filtrado
 - [x] Perf: scrape UIA PS persistente; poll 1.6s; scrape 6–13s; RAF solo poses animadas
 - [ ] Focus Cursor Mac/Linux

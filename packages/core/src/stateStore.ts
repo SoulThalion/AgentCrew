@@ -14,6 +14,7 @@ import {
   fileTitulo,
   fileUltima,
   fileVisto,
+  fileErrorPending,
   prefixSubagentes,
 } from './paths.js';
 import { writeAtomic, readText, removeFile } from './atomicWrite.js';
@@ -91,6 +92,26 @@ export function clearRun(stateDir: string, id: string): void {
 export function hasRun(stateDir: string, id: string): boolean {
   return fs.existsSync(fileRun(stateDir, id));
 }
+
+export function markErrorPending(stateDir: string, id: string, at = Date.now()): void {
+  if (!id.trim()) return;
+  ensureStateDir(stateDir);
+  writeAtomic(fileErrorPending(stateDir, id), String(at), 'utf8');
+}
+
+export function clearErrorPending(stateDir: string, id: string): void {
+  removeFile(fileErrorPending(stateDir, id));
+}
+
+export function readErrorPendingAt(stateDir: string, id: string): number | null {
+  const raw = readText(fileErrorPending(stateDir, id));
+  if (!raw) return null;
+  const n = Number.parseInt(raw.trim(), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Grace legado “error seguido” (ms). */
+export const ERROR_PENDING_MS = 6_000;
 
 export function writePrompt(stateDir: string, id: string, prompt: string): void {
   ensureStateDir(stateDir);
