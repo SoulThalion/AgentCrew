@@ -1,5 +1,6 @@
 /**
  * ¿Hay proceso Cursor IDE? (para auto-quit del panel).
+ * tasklist filtrado + buffer chico (evita alloc 4MB por poll).
  */
 import { execFile } from 'node:child_process';
 import path from 'node:path';
@@ -7,46 +8,49 @@ import path from 'node:path';
 const CACHE_MS = 4000;
 let cache: { at: number; alive: boolean } | null = null;
 
-function listNames(): Promise<string[]> {
+function cursorAliveWin(): Promise<boolean> {
   return new Promise((resolve) => {
-    if (process.platform === 'win32') {
-      execFile(
-        'tasklist',
-        ['/FO', 'CSV', '/NH'],
-        {
-          windowsHide: true,
-          timeout: 8000,
-          maxBuffer: 4 * 1024 * 1024,
-        },
-        (err, stdout) => {
-          if (err || !stdout) return resolve([]);
-          const names: string[] = [];
-          for (const line of String(stdout).split(/\r?\n/)) {
-            const m = line.match(/^"([^"]+)"/);
-            if (m?.[1]) names.push(m[1].replace(/\.exe$/i, ''));
-          }
-          resolve(names);
-        },
-      );
-      return;
-    }
-    execFile('ps', ['-A', '-o', 'comm='], { timeout: 5000 }, (err, stdout) => {
-      if (err || !stdout) return resolve([]);
-      resolve(
-        String(stdout)
+    execFile(
+      'tasklist',
+      ['/FI', 'IMAGENAME eq Cursor.exe', '/NH'],
+      {
+        windowsHide: true,
+        timeout: 5000,
+        maxBuffer: 64 * 1024,
+        encoding: 'utf8',
+      },
+      (err, stdout) => {
+        if (err || !stdout) return resolve(false);
+        resolve(/Cursor\.exe/i.test(String(stdout)));
+      },
+    );
+  });
+}
+
+function cursorAliveUnix(): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(
+      'ps',
+      ['-A', '-o', 'comm='],
+      { timeout: 5000, maxBuffer: 256 * 1024, encoding: 'utf8' },
+      (err, stdout) => {
+        if (err || !stdout) return resolve(false);
+        const alive = String(stdout)
           .split(/\n/)
-          .map((s) => path.basename(s.trim()))
-          .filter(Boolean),
-      );
-    });
+          .some((s) => path.basename(s.trim()).toLowerCase() === 'cursor');
+        resolve(alive);
+      },
+    );
   });
 }
 
 export async function isCursorAlive(): Promise<boolean> {
   const now = Date.now();
   if (cache && now - cache.at < CACHE_MS) return cache.alive;
-  const names = await listNames();
-  const alive = names.some((n) => n.toLowerCase() === 'cursor');
+  const alive =
+    process.platform === 'win32'
+      ? await cursorAliveWin()
+      : await cursorAliveUnix();
   cache = { at: now, alive };
   return alive;
 }

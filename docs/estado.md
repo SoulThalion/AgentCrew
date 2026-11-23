@@ -48,6 +48,7 @@
 - [x] Footer Inc/Otr: no tumbar refresh si `usage-summary` 401 (periodo basta)
 - [x] Avisos voz umbrales uso (50/65/80/90/95/100) + `uso-avisos.txt`
 - [x] Watcher Cursor↔panel (Startup + auto-quit) — `docs/15-cursor-watch.md`
+- [x] RAM main: hover sin loadURL repetido; dock place solo ABN_POSCHANGED; tasklist filtrado
 - [x] Perf: scrape UIA PS persistente; poll 1.6s; scrape 6–13s; RAF solo poses animadas
 - [ ] Focus Cursor Mac/Linux
 - [ ] QA subagente (límite modelo)

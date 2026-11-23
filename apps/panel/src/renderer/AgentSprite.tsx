@@ -8,13 +8,20 @@ type Props = {
   className?: string;
 };
 
-/** Solo estas poses mueven frame; el resto 1 paint (ahorra RAF×N sprites). */
+/**
+ * Poses con frame>0. Idle (atento/terminado/error/detenido) también:
+ * frame=0 deja atento en parpadeo (ojos cerrados) y congela Z/humo/rebote.
+ */
 const ANIMATED = new Set([
   'trabajando',
   'esperando',
   'subagentes',
   'leyendo',
   'planificando',
+  'atento',
+  'terminado',
+  'error',
+  'detenido',
 ]);
 
 /** Lienzo 56×66 = Nuevo-Sprite legacy. */

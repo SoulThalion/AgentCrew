@@ -96,7 +96,8 @@ export function drawFace(
     (pose === 'trabajando' || pose === 'esperando' || pose === 'subagentes');
 
   if (pose === 'atento') {
-    if (step % 18 === 0) {
+    // step===0 no parpadear (paint estático / primer frame)
+    if (step > 0 && step % 18 === 0) {
       line(ctx, 3, 14, 15, 14, 2.6, '#FFFFFF');
       line(ctx, 17, 14, 29, 14, 2.6, '#FFFFFF');
     } else {

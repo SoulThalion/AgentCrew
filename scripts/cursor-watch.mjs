@@ -105,16 +105,11 @@ function listProcessNames() {
     if (process.platform === 'win32') {
       execFile(
         'tasklist',
-        ['/FO', 'CSV', '/NH'],
-        { windowsHide: true, timeout: 8000, maxBuffer: 4 * 1024 * 1024 },
+        ['/FI', 'IMAGENAME eq Cursor.exe', '/NH'],
+        { windowsHide: true, timeout: 5000, maxBuffer: 64 * 1024 },
         (err, stdout) => {
           if (err || !stdout) return resolve([]);
-          const names = [];
-          for (const line of String(stdout).split(/\r?\n/)) {
-            const m = line.match(/^"([^"]+)"/);
-            if (m?.[1]) names.push(m[1].replace(/\.exe$/i, ''));
-          }
-          resolve(names);
+          resolve(/Cursor\.exe/i.test(String(stdout)) ? ['Cursor'] : []);
         },
       );
       return;

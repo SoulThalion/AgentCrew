@@ -548,11 +548,27 @@ function createWindow(): void {
   });
 }
 
+function logMemSample(): void {
+  try {
+    const mu = process.memoryUsage();
+    const line =
+      `${new Date().toISOString()} mem rss=${Math.round(mu.rss / 1e6)}` +
+      ` heap=${Math.round(mu.heapUsed / 1e6)}/` +
+      `${Math.round(mu.heapTotal / 1e6)}` +
+      ` ext=${Math.round(mu.external / 1e6)}` +
+      ` ab=${Math.round((mu.arrayBuffers || 0) / 1e6)}\n`;
+    fs.appendFileSync(path.join(stateDir(), 'panel-error.log'), line, 'utf8');
+  } catch {
+    /* ignore */
+  }
+}
+
 function startWatchers(): void {
   if (pollTimer) clearInterval(pollTimer);
   let learnTick = 0;
   // 1.6s: menos CPU; scrape UIA adaptativo (activo ~6.4s / idle ~12.8s)
   const POLL_MS = 1600;
+  logMemSample();
   pollTimer = setInterval(() => {
     pushAgents();
     consumeMostrar();
@@ -578,6 +594,8 @@ function startWatchers(): void {
     }
     // ~cada 6.4s (+ cache 4s en isCursorAlive)
     if (learnTick % 4 === 0) checkCursorStillThere();
+    // ~cada 96s: muestra RSS/heap (diagnóstico fuga)
+    if (learnTick % 60 === 0) logMemSample();
   }, POLL_MS);
 
   // Primera lectura de uso al arrancar

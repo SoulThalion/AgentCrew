@@ -25,6 +25,7 @@ export type ElectronWin = {
   getNativeWindowHandle: () => Buffer;
   setBounds: (b: { x: number; y: number; width: number; height: number }) => void;
   getBounds?: () => { x: number; y: number; width: number; height: number };
+  getContentSize?: () => number[];
   setContentSize?: (width: number, height: number) => void;
   hookWindowMessage?: (
     message: number,
@@ -191,11 +192,15 @@ function place(): void {
       SWP_SHOWWINDOW,
     );
 
-    // Sync tamaño del webContents (si no, footer queda “arriba” y abajo solo fondo)
+    // Sync tamaño del webContents (si no, footer queda “arriba” y abajo solo fondo).
+    // Solo si cambia: setContentSize repetido hincha RAM en Electron.
     const dipW = Math.max(1, Math.round(w / state.scaleFactor));
     const dipH = Math.max(1, Math.round(h / state.scaleFactor));
     try {
-      state.win.setContentSize?.(dipW, dipH);
+      const prev = state.win.getContentSize?.();
+      if (!prev || prev[0] !== dipW || prev[1] !== dipH) {
+        state.win.setContentSize?.(dipW, dipH);
+      }
     } catch {
       /* ignore */
     }
@@ -243,21 +248,18 @@ export function attach(win: ElectronWin, widthDip: number, opts?: AttachOptions)
   };
 
   if (typeof win.hookWindowMessage === 'function') {
-    win.hookWindowMessage(callbackMsg, (_wParam, lParam) => {
+    win.hookWindowMessage(callbackMsg, (wParam, lParam) => {
       try {
-        const code =
-          lParam && lParam.byteLength >= 4
-            ? lParam.readInt32LE(0)
-            : Number(_wParam?.readInt32LE?.(0) ?? 0);
-        // ABN_* viene en lParam según MSDN
-        if (code === ABN_POSCHANGED || Number(lParam?.readBigInt64LE?.(0) ?? 0) === ABN_POSCHANGED) {
-          place();
-        } else {
-          // algunos builds Electron pasan el código en wParam
+        // Solo ABN_POSCHANGED (1). Otros ABN_* no deben forzar place (fuga setContentSize).
+        const fromL =
+          lParam && lParam.byteLength >= 4 ? lParam.readInt32LE(0) : -1;
+        const fromW =
+          wParam && wParam.byteLength >= 4 ? wParam.readInt32LE(0) : -1;
+        if (fromL === ABN_POSCHANGED || fromW === ABN_POSCHANGED) {
           place();
         }
       } catch {
-        place();
+        /* ignore */
       }
     });
   }

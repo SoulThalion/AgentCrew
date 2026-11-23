@@ -227,17 +227,23 @@ export function disposeUiaScraper(): void {
 
 function onScrapeData(chunk: string): void {
   scrapeBuf += chunk;
-  const nl = scrapeBuf.indexOf('\n');
-  if (nl < 0) return;
-  const line = scrapeBuf.slice(0, nl).replace(/\r$/, '');
-  scrapeBuf = scrapeBuf.slice(nl + 1);
-  if (!line.startsWith('RESULT:')) return;
-  const raw = line.slice('RESULT:'.length);
-  const pending = scrapePending;
-  scrapePending = null;
-  if (!pending) return;
-  clearTimeout(pending.timer);
-  pending.resolve(parseScrapeResult(raw));
+  // Cap: si PS no manda newline, no hinchar main
+  if (scrapeBuf.length > 512_000) scrapeBuf = scrapeBuf.slice(-64_000);
+  let nl = scrapeBuf.indexOf('\n');
+  while (nl >= 0) {
+    const line = scrapeBuf.slice(0, nl).replace(/\r$/, '');
+    scrapeBuf = scrapeBuf.slice(nl + 1);
+    if (line.startsWith('RESULT:')) {
+      const raw = line.slice('RESULT:'.length);
+      const pending = scrapePending;
+      scrapePending = null;
+      if (pending) {
+        clearTimeout(pending.timer);
+        pending.resolve(parseScrapeResult(raw));
+      }
+    }
+    nl = scrapeBuf.indexOf('\n');
+  }
 }
 
 function ensureScrapeChild(): ChildProcessWithoutNullStreams | null {
