@@ -40,7 +40,7 @@ describe('handleEvent', () => {
     );
   });
 
-  it('stop completed → terminado', () => {
+  it('stop completed → terminado + sonar fin', () => {
     handleEvent(
       'prompt',
       JSON.stringify({ conversation_id: 's1', prompt: 'x', composer_mode: 'agent' }),
@@ -55,6 +55,53 @@ describe('handleEvent', () => {
     expect(fs.readFileSync(path.join(dir, 'estado-s1.txt'), 'utf8').startsWith('terminado|')).toBe(
       true,
     );
+    expect(fs.readFileSync(path.join(dir, 'sonar-s1.txt'), 'utf8').trim()).toBe('fin');
+  });
+
+  it('respuesta ? + stop → solo sonar pregunta (no fin)', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'pq1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'respuesta',
+      JSON.stringify({ conversation_id: 'pq1', text: '¿Lo revisas?' }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'sonar-pq1.txt'), 'utf8').trim()).toBe('pregunta');
+    handleEvent(
+      'stop',
+      JSON.stringify({ conversation_id: 'pq1', status: 'completed' }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'estado-pq1.txt'), 'utf8').startsWith('esperando|')).toBe(
+      true,
+    );
+    expect(fs.readFileSync(path.join(dir, 'sonar-pq1.txt'), 'utf8').trim()).toBe('pregunta');
+  });
+
+  it('espera AskQuestion + stop → solo sonar pregunta (no fin)', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'aq1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'espera',
+      JSON.stringify({ conversation_id: 'aq1', tool_name: 'AskQuestion' }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'sonar-aq1.txt'), 'utf8').trim()).toBe('pregunta');
+    handleEvent(
+      'stop',
+      JSON.stringify({ conversation_id: 'aq1', status: 'completed' }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'estado-aq1.txt'), 'utf8').startsWith('esperando|')).toBe(
+      true,
+    );
+    expect(fs.readFileSync(path.join(dir, 'sonar-aq1.txt'), 'utf8').trim()).toBe('pregunta');
   });
 
   it('stop status raro/vacío → detenido (no deja trabajando)', () => {

@@ -22,6 +22,7 @@ import {
   prefixSubagentes,
   readEstado,
   readModo,
+  readText,
   removeFile,
   safeId,
   writeEstado,
@@ -38,6 +39,18 @@ import {
   lastSentence,
   looksLikeQuestion,
 } from './stdin.js';
+
+function sonarPath(stateDir: string, id: string): string {
+  return path.join(stateDir, `sonar-${safeId(id)}.txt`);
+}
+
+function writeSonar(stateDir: string, id: string, tipo: string): void {
+  try {
+    fs.writeFileSync(sonarPath(stateDir, id), tipo, 'utf8');
+  } catch {
+    /* ignore */
+  }
+}
 
 export type HookResult = {
   stdout: string;
@@ -147,16 +160,10 @@ export function handleEvent(
 
       case 'espera': {
         if (id) {
+          // AskQuestion: marca pregunta para que stop no emita «fin» después.
+          writeUltima(stateDir, id, 'pregunta');
           writeEstado(stateDir, id, 'esperando');
-          try {
-            fs.writeFileSync(
-              path.join(stateDir, `sonar-${safeId(id)}.txt`),
-              'pregunta',
-              'utf8',
-            );
-          } catch {
-            /* ignore */
-          }
+          writeSonar(stateDir, id, 'pregunta');
         }
         return allow();
       }
@@ -245,7 +252,11 @@ export function handleEvent(
         writeUltima(stateDir, id, marca);
         const frase = lastSentence(texto);
         if (frase) writeFrase(stateDir, id, frase);
-        if (marca === 'pregunta') writeEstado(stateDir, id, 'esperando');
+        if (marca === 'pregunta') {
+          writeEstado(stateDir, id, 'esperando');
+          // Voz aquí (no en stop) para no duplicar con AskQuestion/espera ni con «fin».
+          writeSonar(stateDir, id, 'pregunta');
+        }
         return empty();
       }
 
@@ -259,8 +270,14 @@ export function handleEvent(
         let tipoSonar = '';
         if (status === 'completed' || status === 'success') {
           clearErrorPending(stateDir, id);
-          writeEstado(stateDir, id, 'terminado');
-          tipoSonar = 'fin';
+          const ultima = readText(fileUltima(stateDir, id))?.trim() ?? '';
+          if (ultima === 'pregunta') {
+            // Ya anunció pregunta (respuesta/espera). No «fin» ni segundo sonar.
+            writeEstado(stateDir, id, 'esperando');
+          } else {
+            writeEstado(stateDir, id, 'terminado');
+            tipoSonar = 'fin';
+          }
         } else if (status === 'error' || status === 'failed') {
           // Cursor a veces emite error + re-prompt inmediato. Sonar solo tras grace
           // (panel confirma error-pending ~6 s; legado “error seguido”).
@@ -272,17 +289,7 @@ export function handleEvent(
           // aborted / cancelled / vacío / desconocido → detenido (no dejar trabajando)
           writeEstado(stateDir, id, 'detenido');
         }
-        if (tipoSonar) {
-          try {
-            fs.writeFileSync(
-              path.join(stateDir, `sonar-${safeId(id)}.txt`),
-              tipoSonar,
-              'utf8',
-            );
-          } catch {
-            /* ignore */
-          }
-        }
+        if (tipoSonar) writeSonar(stateDir, id, tipoSonar);
         return empty();
       }
 
