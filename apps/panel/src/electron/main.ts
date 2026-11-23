@@ -55,8 +55,12 @@ import { pathToFileURL } from 'node:url';
 import { readTitulo, writeTitulo } from '@agentcrew/core';
 
 const STRIP_WIDTH = 72;
-/** Sin Cursor IDE → cerrar panel al siguiente poll (watcher lo reabre al volver). */
-const CURSOR_GONE_GRACE_MS = 0;
+/**
+ * Sin Cursor confirmado → auto-quit tras grace.
+ * ≥10s: varios ticks fallidos seguidos; evita bucle quit/relanzar si tasklist
+ * falla bajo carga (issue #1). Watcher reabre al volver el IDE.
+ */
+const CURSOR_GONE_GRACE_MS = 12_000;
 const gotLock = app.requestSingleInstanceLock();
 
 let mainWindow: BrowserWindow | null = null;

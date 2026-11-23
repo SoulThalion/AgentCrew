@@ -48,6 +48,12 @@ type DockState = {
   registered: boolean;
   placing: boolean;
   win: ElectronWin;
+  /** Último objetivo (pre-QUERYPOS) — skip si monitor/ancho no cambió. */
+  lastWant: { x: number; y: number; w: number; h: number } | null;
+  lastDipW: number;
+  lastDipH: number;
+  /** Debounce ABN_POSCHANGED. */
+  posTimer: ReturnType<typeof setTimeout> | null;
 };
 
 let state: DockState | null = null;
@@ -157,18 +163,35 @@ function resolveMonitorRc(): MonitorRect {
   return { ...info.rcMonitor };
 }
 
-function place(): void {
+function place(force = false): void {
   if (!state || !state.registered || state.placing) return;
   if (state.win.isDestroyed()) return;
   state.placing = true;
   try {
     const mon = resolveMonitorRc();
     const physW = Math.max(1, Math.round(state.widthDip * state.scaleFactor));
+    const wantX = mon.right - physW;
+    const wantY = mon.top;
+    const wantW = physW;
+    const wantH = Math.max(1, mon.bottom - mon.top);
+
+    // Skip temprano: solo lastWant (pre-QUERYPOS). No mezclar lastDip post-QUERYPOS.
+    if (
+      !force &&
+      state.lastWant &&
+      state.lastWant.x === wantX &&
+      state.lastWant.y === wantY &&
+      state.lastWant.w === wantW &&
+      state.lastWant.h === wantH
+    ) {
+      return;
+    }
+
     const data = makeData(state.hwnd, state.callbackMsg);
     data.uEdge = ABE_RIGHT;
     // Monitor completo físico — no workArea (el hueco AppBar queda fuera del workArea)
-    data.rc.left = mon.right - physW;
-    data.rc.top = mon.top;
+    data.rc.left = wantX;
+    data.rc.top = wantY;
     data.rc.right = mon.right;
     data.rc.bottom = mon.bottom;
 
@@ -179,6 +202,9 @@ function place(): void {
     const y = data.rc.top;
     const w = Math.max(1, data.rc.right - data.rc.left);
     const h = Math.max(1, data.rc.bottom - data.rc.top);
+    const dipW = Math.max(1, Math.round(w / state.scaleFactor));
+    const dipH = Math.max(1, Math.round(h / state.scaleFactor));
+    const sameDip = state.lastDipW === dipW && state.lastDipH === dipH;
 
     // NO usar Electron setBounds (clampa workArea → hueco vacío).
     MoveWindow(state.hwnd, x, y, w, h, true);
@@ -192,19 +218,18 @@ function place(): void {
       SWP_SHOWWINDOW,
     );
 
-    // Sync tamaño del webContents (si no, footer queda “arriba” y abajo solo fondo).
-    // Solo si cambia: setContentSize repetido hincha RAM en Electron.
-    const dipW = Math.max(1, Math.round(w / state.scaleFactor));
-    const dipH = Math.max(1, Math.round(h / state.scaleFactor));
-    try {
-      const prev = state.win.getContentSize?.();
-      if (!prev || prev[0] !== dipW || prev[1] !== dipH) {
+    // Sync webContents solo si DIP cambió (setContentSize repetido hincha RAM).
+    if (!sameDip) {
+      try {
         state.win.setContentSize?.(dipW, dipH);
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
+      state.lastDipW = dipW;
+      state.lastDipH = dipH;
     }
 
+    state.lastWant = { x: wantX, y: wantY, w: wantW, h: wantH };
     state.win.setMovable?.(false);
     logDock(
       `place setOk=${String(setOk)} phys=${x},${y} ${w}x${h} dip=${dipW}x${dipH} scale=${state.scaleFactor}`,
@@ -214,6 +239,16 @@ function place(): void {
   } finally {
     state.placing = false;
   }
+}
+
+function schedulePlaceFromPosChanged(): void {
+  if (!state) return;
+  if (state.posTimer) clearTimeout(state.posTimer);
+  state.posTimer = setTimeout(() => {
+    if (!state) return;
+    state.posTimer = null;
+    place(false);
+  }, 400);
 }
 
 export type AttachOptions = {
@@ -245,18 +280,21 @@ export function attach(win: ElectronWin, widthDip: number, opts?: AttachOptions)
     registered: true,
     placing: false,
     win,
+    lastWant: null,
+    lastDipW: 0,
+    lastDipH: 0,
+    posTimer: null,
   };
 
   if (typeof win.hookWindowMessage === 'function') {
     win.hookWindowMessage(callbackMsg, (wParam, lParam) => {
       try {
-        // Solo ABN_POSCHANGED (1). Otros ABN_* no deben forzar place (fuga setContentSize).
-        const fromL =
-          lParam && lParam.byteLength >= 4 ? lParam.readInt32LE(0) : -1;
+        // Solo wParam = ABN_* (MSDN). lParam no es código — leerlo como 1 = falsos place.
+        void lParam;
         const fromW =
           wParam && wParam.byteLength >= 4 ? wParam.readInt32LE(0) : -1;
-        if (fromL === ABN_POSCHANGED || fromW === ABN_POSCHANGED) {
-          place();
+        if (fromW === ABN_POSCHANGED) {
+          schedulePlaceFromPosChanged();
         }
       } catch {
         /* ignore */
@@ -264,15 +302,14 @@ export function attach(win: ElectronWin, widthDip: number, opts?: AttachOptions)
     });
   }
 
-  place();
-  // Electron a veces reposiciona tras show/load — reafirmar
-  setTimeout(() => place(), 50);
-  setTimeout(() => place(), 250);
-  setTimeout(() => place(), 800);
+  place(true);
+  // Reafirmar tras show/load; sin force → no-op si lastWant igual (anti-fuga RSS)
+  setTimeout(() => place(false), 250);
+  setTimeout(() => place(false), 800);
 }
 
 export function reposition(): void {
-  place();
+  place(true);
 }
 
 /** Cambia monitor objetivo (coords físicas) y reafirma AppBar. */
@@ -280,13 +317,17 @@ export function setMonitor(monitorRc: MonitorRect, scaleFactor?: number): void {
   if (!state) return;
   state.monitorRc = monitorRc;
   if (scaleFactor && scaleFactor > 0) state.scaleFactor = scaleFactor;
-  place();
+  place(true);
 }
 
 export function detach(): void {
   if (!state || !state.registered) {
     state = null;
     return;
+  }
+  if (state.posTimer) {
+    clearTimeout(state.posTimer);
+    state.posTimer = null;
   }
   try {
     if (typeof state.win.unhookWindowMessage === 'function' && state.callbackMsg) {
