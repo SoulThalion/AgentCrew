@@ -8,6 +8,15 @@ type Props = {
   className?: string;
 };
 
+/** Solo estas poses mueven frame; el resto 1 paint (ahorra RAF×N sprites). */
+const ANIMATED = new Set([
+  'trabajando',
+  'esperando',
+  'subagentes',
+  'leyendo',
+  'planificando',
+]);
+
 /** Lienzo 56×66 = Nuevo-Sprite legacy. */
 export function AgentSprite({ pose, color, subagentCount = 2, className }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -17,6 +26,8 @@ export function AgentSprite({ pose, color, subagentCount = 2, className }: Props
   poseRef.current = pose;
   colorRef.current = color;
   countRef.current = subagentCount;
+
+  const animated = ANIMATED.has(pose);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -29,6 +40,9 @@ export function AgentSprite({ pose, color, subagentCount = 2, className }: Props
     canvas.style.width = `${SPRITE_W}px`;
     canvas.style.height = `${SPRITE_H}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    drawSprite(ctx, pose, color, 0, subagentCount);
+    if (!animated) return;
 
     let frame = 0;
     let raf = 0;
@@ -47,10 +61,9 @@ export function AgentSprite({ pose, color, subagentCount = 2, className }: Props
       }
       raf = requestAnimationFrame(tick);
     };
-    drawSprite(ctx, pose, color, 0, subagentCount);
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [animated, pose, color, subagentCount]);
 
   return (
     <canvas

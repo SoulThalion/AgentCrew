@@ -3,8 +3,9 @@
  * Cursor actual: TabItem "{título}, Chat Editors: Editor Group N"
  * Legacy también: botón "Open agent {título}"
  */
-import { execFile } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   listAgents,
@@ -17,6 +18,15 @@ import {
 
 let busy = false;
 let lastRun = 0;
+/** Min entre scrapes UIA (PowerShell caro). */
+const MIN_SCRAPE_MS = 5500;
+let scrapeChild: ChildProcessWithoutNullStreams | null = null;
+let scrapeScriptPath = '';
+let scrapeBuf = '';
+let scrapePending: {
+  resolve: (titles: string[]) => void;
+  timer: ReturnType<typeof setTimeout>;
+} | null = null;
 /** Ids de agente cuyo título UI está seleccionado (foco). */
 let cachedFocusedIds: string[] = [];
 /** Títulos de chats abiertos en Cursor (sin marca de foco). */
@@ -65,11 +75,8 @@ function isJunkTitle(t: string): boolean {
   return false;
 }
 
-function scrapePs(): Promise<string[]> {
-  // Solo cobertura UIA. Dedup por título (case-insensitive) → 1 fila UI / título
-  // (evita sprites duplicados). No cambia matching learnTitles/compose.
-  const ps = `
-$ErrorActionPreference = 'SilentlyContinue'
+/** Script PS: Add-Type 1 vez; stdin GO → RESULT:… (proceso persistente). */
+const SCRAPE_PS1 = `$ErrorActionPreference = 'SilentlyContinue'
 Add-Type -ReferencedAssemblies @('UIAutomationClient','UIAutomationTypes','WindowsBase') -TypeDefinition @"
 using System;
 using System.Collections.Generic;
@@ -96,7 +103,6 @@ public static class ListAgentTitles {
     if (t.Length < 2 || t.Length > 120) return;
     if (string.Equals(t, "New Agent", StringComparison.OrdinalIgnoreCase)) return;
     if (!seen.Add(t)) {
-      // Mismo título otra vez: solo subir marca de foco (no segunda fila)
       if (!sel) return;
       for (int i = 0; i < lines.Count; i++) {
         string bare = lines[i].StartsWith("*") ? lines[i].Substring(1) : lines[i];
@@ -121,7 +127,6 @@ public static class ListAgentTitles {
           AddTitle(seen, lines, nombre.Substring(0, marca).Trim(), Selected(el));
           continue;
         }
-        // Variante sin coma / texto distinto pero con Chat Editors
         marca = nombre.IndexOf("Chat Editors", StringComparison.OrdinalIgnoreCase);
         if (marca > 0) {
           string tit = nombre.Substring(0, marca).Trim().TrimEnd(',', ' ', '-', ':');
@@ -146,7 +151,6 @@ public static class ListAgentTitles {
       try { pids.Add(proc.Id); } catch { }
     }
     if (pids.Count == 0) return "";
-    // Todas las ventanas top-level de procesos Cursor (no solo MainWindowHandle)
     try {
       var winCond = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window);
       foreach (AutomationElement win in AutomationElement.RootElement.FindAll(TreeScope.Children, winCond)) {
@@ -156,7 +160,6 @@ public static class ListAgentTitles {
         ScrapeRoot(win, seen, lines);
       }
     } catch { }
-    // Fallback MainWindowHandle por si Children no listó alguna
     foreach (var proc in Process.GetProcessesByName("Cursor")) {
       IntPtr h = IntPtr.Zero;
       try { h = proc.MainWindowHandle; } catch { continue; }
@@ -169,26 +172,133 @@ public static class ListAgentTitles {
   }
 }
 "@
-[ListAgentTitles]::Go()
+while ($true) {
+  $cmd = [Console]::In.ReadLine()
+  if ($null -eq $cmd) { break }
+  if ($cmd -eq 'QUIT') { break }
+  if ($cmd -eq 'GO') {
+    $r = [ListAgentTitles]::Go()
+    [Console]::Out.WriteLine('RESULT:' + $r)
+    [Console]::Out.Flush()
+  }
+}
 `;
-  return new Promise((resolve) => {
-    execFile(
+
+function parseScrapeResult(raw: string): string[] {
+  return raw
+    .split('|')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && l.length <= 120 && !l.includes('ListAgentTitles'))
+    .filter((l) => !isJunkTitle(l.startsWith('*') ? l.slice(1) : l));
+}
+
+function ensureScrapeScript(): string {
+  if (scrapeScriptPath && fs.existsSync(scrapeScriptPath)) return scrapeScriptPath;
+  scrapeScriptPath = path.join(os.tmpdir(), 'agentcrew-uia-scrape.ps1');
+  fs.writeFileSync(scrapeScriptPath, SCRAPE_PS1, 'utf8');
+  return scrapeScriptPath;
+}
+
+function killScrapeChild(): void {
+  if (scrapePending) {
+    clearTimeout(scrapePending.timer);
+    scrapePending.resolve([]);
+    scrapePending = null;
+  }
+  scrapeBuf = '';
+  const c = scrapeChild;
+  scrapeChild = null;
+  if (!c) return;
+  try {
+    c.stdin.write('QUIT\n');
+  } catch {
+    /* ignore */
+  }
+  try {
+    c.kill();
+  } catch {
+    /* ignore */
+  }
+}
+
+export function disposeUiaScraper(): void {
+  killScrapeChild();
+}
+
+function onScrapeData(chunk: string): void {
+  scrapeBuf += chunk;
+  const nl = scrapeBuf.indexOf('\n');
+  if (nl < 0) return;
+  const line = scrapeBuf.slice(0, nl).replace(/\r$/, '');
+  scrapeBuf = scrapeBuf.slice(nl + 1);
+  if (!line.startsWith('RESULT:')) return;
+  const raw = line.slice('RESULT:'.length);
+  const pending = scrapePending;
+  scrapePending = null;
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pending.resolve(parseScrapeResult(raw));
+}
+
+function ensureScrapeChild(): ChildProcessWithoutNullStreams | null {
+  if (scrapeChild && !scrapeChild.killed) return scrapeChild;
+  try {
+    const script = ensureScrapeScript();
+    const child = spawn(
       'powershell.exe',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
-      { windowsHide: true, encoding: 'utf8', timeout: 12000, maxBuffer: 2 * 1024 * 1024 },
-      (err, stdout) => {
-        if (err || !stdout) {
-          resolve([]);
-          return;
-        }
-        const titles = String(stdout)
-          .split('|')
-          .map((l) => l.trim())
-          .filter((l) => l.length > 0 && l.length <= 120 && !l.includes('ListAgentTitles'))
-          .filter((l) => !isJunkTitle(l.startsWith('*') ? l.slice(1) : l));
-        resolve(titles);
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script],
+      {
+        windowsHide: true,
+        stdio: ['pipe', 'pipe', 'ignore'],
       },
     );
+    scrapeChild = child;
+    scrapeBuf = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (d: string) => onScrapeData(String(d)));
+    child.on('exit', () => {
+      if (scrapeChild === child) scrapeChild = null;
+      if (scrapePending) {
+        clearTimeout(scrapePending.timer);
+        scrapePending.resolve([]);
+        scrapePending = null;
+      }
+    });
+    return child;
+  } catch {
+    scrapeChild = null;
+    return null;
+  }
+}
+
+function scrapePs(): Promise<string[]> {
+  // Proceso PS persistente: Add-Type 1 vez; cada poll solo Go() UIA.
+  return new Promise((resolve) => {
+    if (scrapePending) {
+      resolve([]);
+      return;
+    }
+    const child = ensureScrapeChild();
+    if (!child) {
+      resolve([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (scrapePending?.resolve === resolve) {
+        scrapePending = null;
+        killScrapeChild();
+        resolve([]);
+      }
+    }, 12000);
+    scrapePending = { resolve, timer };
+    try {
+      child.stdin.write('GO\n');
+    } catch {
+      clearTimeout(timer);
+      scrapePending = null;
+      killScrapeChild();
+      resolve([]);
+    }
   });
 }
 
@@ -359,7 +469,7 @@ export async function learnTitlesOnce(stateDir: string): Promise<number> {
   if (process.platform !== 'win32') return 0;
   if (busy) return 0;
   const now = Date.now();
-  if (now - lastRun < 1500) return 0;
+  if (now - lastRun < MIN_SCRAPE_MS) return 0;
   busy = true;
   lastRun = now;
   try {

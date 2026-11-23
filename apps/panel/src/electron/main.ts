@@ -35,6 +35,7 @@ import { focusCursorWindow } from './focusCursor';
 import { openCursorChat } from './openChat';
 import { destroyHoverCard, hideHoverCard, showHoverCard } from './hoverCard';
 import {
+  disposeUiaScraper,
   getFocusedAgentIds,
   getFocusedChatTitles,
   getUiChatTitles,
@@ -504,6 +505,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      spellcheck: false,
     },
   });
   // Evita caption vertical "AgentCrew" en franja estrecha (Windows)
@@ -549,31 +551,34 @@ function createWindow(): void {
 function startWatchers(): void {
   if (pollTimer) clearInterval(pollTimer);
   let learnTick = 0;
+  // 1.6s: menos CPU; scrape UIA adaptativo (activo ~6.4s / idle ~12.8s)
+  const POLL_MS = 1600;
   pollTimer = setInterval(() => {
     pushAgents();
     consumeMostrar();
     consumeCerrar();
     consumeAjustes();
-    noteWorkingCount(allDoneTracker, countRunFiles(stateDir()));
+    const runs = countRunFiles(stateDir());
+    noteWorkingCount(allDoneTracker, runs);
     consumeSonar();
-    // ~cada 2.4s: aprender títulos "Open agent …" de Cursor (async)
     learnTick++;
-    if (learnTick % 3 === 0) {
+    const learnEvery = runs > 0 ? 4 : 8;
+    if (learnTick % learnEvery === 0) {
       void learnTitlesOnce(stateDir()).then(() => {
         // Foco puede cambiar sin títulos nuevos → refrescar poses (atento/visto)
         pushAgents(true);
       });
     }
-    // Uso Cursor ~cada 90s (throttle interno); refresca Inc/Otr del footer
-    if (learnTick % 4 === 0) {
+    // Uso Cursor ~cada 96s; refresca Inc/Otr del footer
+    if (learnTick % 60 === 0) {
       void refreshCursorUsage(stateDir()).then((ok) => {
         if (ok) pushAgents(true);
         maybeAnnounceUso();
       });
     }
-    // ~cada 1.6s: si Cursor IDE no está, salir (watcher lo reabre al volver)
-    if (learnTick % 2 === 0) checkCursorStillThere();
-  }, 800);
+    // ~cada 6.4s (+ cache 4s en isCursorAlive)
+    if (learnTick % 4 === 0) checkCursorStillThere();
+  }, POLL_MS);
 
   // Primera lectura de uso al arrancar
   void refreshCursorUsage(stateDir()).then((ok) => {
@@ -802,6 +807,7 @@ if (!gotLock) {
     }
     destroyHoverCard();
     destroyTray();
+    disposeUiaScraper();
     if (pollTimer) clearInterval(pollTimer);
   });
 }

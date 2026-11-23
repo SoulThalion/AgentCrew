@@ -238,6 +238,7 @@ Salida: `apps/panel/release/` (NSIS + portable). El `.exe` solo es el panel; hoo
 | Menos sprites que chats | El scrape UIA a veces no ve todos los tabs; orphans activos igual pueden salir |
 | Sin voz | Avisos no mute; modo voz; MP3 en `voces/`; Fish key + Probar voz |
 | Panel no sigue a Cursor | `install-watch`; quitar `watch-off.txt` |
+| Ventilador / CPU alta del panel | Cerrar y relanzar tras update; scrape UIA ya es proceso PS persistente (no spawnea cada 2 s). Si sigue alto: menos chats Cursor abiertos |
 
 ---
 

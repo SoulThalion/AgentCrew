@@ -4,6 +4,9 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 
+const CACHE_MS = 4000;
+let cache: { at: number; alive: boolean } | null = null;
+
 function listNames(): Promise<string[]> {
   return new Promise((resolve) => {
     if (process.platform === 'win32') {
@@ -40,6 +43,10 @@ function listNames(): Promise<string[]> {
 }
 
 export async function isCursorAlive(): Promise<boolean> {
+  const now = Date.now();
+  if (cache && now - cache.at < CACHE_MS) return cache.alive;
   const names = await listNames();
-  return names.some((n) => n.toLowerCase() === 'cursor');
+  const alive = names.some((n) => n.toLowerCase() === 'cursor');
+  cache = { at: now, alive };
+  return alive;
 }
