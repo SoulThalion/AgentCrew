@@ -6,6 +6,7 @@ import {
   composeChats,
   writeEstado,
   writeTitulo,
+  writePrompt,
   markVisto,
   clearRun,
 } from '../src/index.js';
@@ -133,6 +134,42 @@ describe('composeChats', () => {
     expect(mirai?.id === 'proj' || mirai?.id === 'mirai').toBe(true);
     expect(proj?.state).toBe('trabajando');
     expect(proj?.id).not.toBe(mirai?.id);
+    expect(list.filter((a) => a.id.startsWith('ui:'))).toHaveLength(0);
+  });
+
+  it('issue #2: 3 sticky iguales + prompts distintos → un slot por tab, sin cruzar', () => {
+    writeEstado(dir, 'a3559', 'trabajando');
+    writeTitulo(dir, 'a3559', 'AgentCrew repository installation');
+    writePrompt(dir, 'a3559', 'AgentCrew repository installation');
+
+    writeEstado(dir, 'fd61', 'terminado');
+    writeTitulo(dir, 'fd61', 'AgentCrew repository installation'); // sticky malo
+    writePrompt(dir, 'fd61', 'Compliance review for GW3');
+    clearRun(dir, 'fd61');
+
+    writeEstado(dir, '70a6', 'terminado');
+    writeTitulo(dir, '70a6', 'AgentCrew repository installation');
+    writePrompt(dir, '70a6', 'Ticket 4207 analysis');
+    clearRun(dir, '70a6');
+
+    const list = composeChats(dir, {
+      uiTitles: [
+        'AgentCrew repository installation',
+        'Compliance review for GW3',
+        'Ticket 4207 analysis',
+      ],
+      focusedTitles: ['AgentCrew repository installation'],
+    });
+    expect(list).toHaveLength(3);
+    const ac = list.find((a) => a.title === 'AgentCrew repository installation');
+    const gw = list.find((a) => a.title === 'Compliance review for GW3');
+    const tix = list.find((a) => a.title === 'Ticket 4207 analysis');
+    expect(ac?.id).toBe('a3559');
+    expect(ac?.state).toBe('trabajando');
+    expect(gw?.id).toBe('fd61');
+    expect(gw?.state).toBe('terminado');
+    expect(tix?.id).toBe('70a6');
+    expect(tix?.state).toBe('terminado');
     expect(list.filter((a) => a.id.startsWith('ui:'))).toHaveLength(0);
   });
 });

@@ -118,6 +118,12 @@ export function writeTitulo(stateDir: string, id: string, titulo: string): void 
   }
 }
 
+/** Borra sticky titulo-* (contaminación / reasignación). */
+export function clearTitulo(stateDir: string, id: string): void {
+  if (!id.trim()) return;
+  removeFile(fileTitulo(stateDir, id));
+}
+
 export function readTitulo(stateDir: string, id: string): string {
   return readText(fileTitulo(stateDir, id)) ?? '';
 }

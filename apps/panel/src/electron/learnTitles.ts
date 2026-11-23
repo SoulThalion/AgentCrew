@@ -11,6 +11,7 @@ import {
   listAgents,
   readTitulo,
   writeTitulo,
+  clearTitulo,
   readText,
   filePrompt,
   resolveFocusedIds,
@@ -338,20 +339,56 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
 
   const used = new Set<string>();
   let updated = 0;
+  const ACTIVE = new Set([
+    'trabajando',
+    'planificando',
+    'leyendo',
+    'esperando',
+    'subagentes',
+  ]);
 
-  /** No pisar titulo de chat aún abierto (evita cruces foco≠activo). */
-  const assign = (id: string, title: string): boolean => {
+  // Pre-pass: sticky apunta a tab A pero prompt es tab B abierto → limpiar
+  for (const c of cands) {
+    if (!c.tituloN || !uiNormSet.has(c.tituloN)) continue;
+    if (c.promptN && uiNormSet.has(c.promptN) && c.promptN !== c.tituloN) {
+      clearTitulo(stateDir, c.id);
+      c.tituloN = '';
+      updated++;
+    }
+  }
+
+  /**
+   * Asigna sticky. No duplicar título UI en otro ID salvo force (click+foco)
+   * o prompt exacto único de este agente.
+   */
+  const assign = (
+    id: string,
+    title: string,
+    opts?: { force?: boolean },
+  ): boolean => {
     const prev = readTitulo(stateDir, id).trim();
     const prevN = norm(prev);
     const titleN = norm(title);
     if (prev && prevN !== titleN && uiNormSet.has(prevN)) {
       return false;
     }
+    const me = cands.find((c) => c.id === id);
+    const other = cands.find((c) => c.id !== id && c.tituloN === titleN);
+    if (other && !opts?.force) {
+      const myExact = me?.promptN === titleN;
+      const otherExact = other.promptN === titleN;
+      if (!myExact || otherExact) {
+        if (prevN === titleN) {
+          used.add(id);
+          return true;
+        }
+        return false;
+      }
+    }
     if (prev !== title) {
       writeTitulo(stateDir, id, title);
       updated++;
-      const cand = cands.find((c) => c.id === id);
-      if (cand) cand.tituloN = titleN;
+      if (me) me.tituloN = titleN;
     }
     used.add(id);
     return true;
@@ -360,28 +397,36 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
   // Click sprite → id conocido + tab enfocado: único enlace seguro foco↔agente
   const clickIds = cachedFocusedIds.filter((id) => agents.some((a) => a.id === id));
   if (focused.length === 1 && clickIds.length === 1) {
-    assign(clickIds[0]!, focused[0]!);
+    assign(clickIds[0]!, focused[0]!, { force: true });
   }
 
-  // NO: "1 foco + 1 activo → assign" (cruzaba chat idle enfocado con otro trabajando)
+  // Prompt exacto antes que sticky (evita reforzar contaminación)
+  for (const title of uiTitles) {
+    const tn = norm(title);
+    if (!tn) continue;
+    const byPrompt = cands.filter(
+      (c) => !used.has(c.id) && c.promptN && c.promptN === tn,
+    );
+    if (byPrompt.length === 1) {
+      assign(byPrompt[0]!.id, title);
+    }
+  }
 
   for (const title of uiTitles) {
     const tn = norm(title);
     if (!tn) continue;
 
-    const byTitulo = cands.filter((c) => !used.has(c.id) && c.tituloN && c.tituloN === tn);
+    const byTitulo = cands.filter(
+      (c) => !used.has(c.id) && c.tituloN && c.tituloN === tn,
+    );
     if (byTitulo.length === 1) {
       assign(byTitulo[0]!.id, title);
       continue;
     }
 
-    const byPrompt = cands.filter((c) => !used.has(c.id) && c.promptN && c.promptN === tn);
-    if (byPrompt.length === 1) {
-      assign(byPrompt[0]!.id, title);
-      continue;
-    }
-
-    // Prefijo solo si título UI ≥ 12 chars (evita includes cortos ambiguos)
+    // Prefijo solo si título UI ≥ 12 chars; no si otro ya posee ese sticky
+    const owned = cands.some((c) => c.tituloN === tn);
+    if (owned) continue;
     const byPrefix = cands.filter((c) => {
       if (used.has(c.id) || !c.promptN || tn.length < 12) return false;
       if (c.promptN.startsWith(tn) || tn.startsWith(c.promptN)) return true;
@@ -402,70 +447,69 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     assign(orphans[0]!.id, freeUi[0]!);
   }
 
-  // Reparar sticky malo: varios agentes mismo título UI + chat UI sin dueño.
-  // Keeper = ya used de ese título si existe; surplus = activos no used del grupo.
-  const ACTIVE = new Set([
-    'trabajando',
-    'planificando',
-    'leyendo',
-    'esperando',
-    'subagentes',
-  ]);
+  // Sticky duplicado: keeper (prompt exact / used / activo) + surplus → freeUi o clear
+  const byTit = new Map<string, typeof cands>();
+  for (const c of cands) {
+    if (!c.tituloN || !uiNormSet.has(c.tituloN)) continue;
+    const arr = byTit.get(c.tituloN) ?? [];
+    arr.push(c);
+    byTit.set(c.tituloN, arr);
+  }
+  const pool: typeof cands = [];
+  for (const [tn, group] of byTit) {
+    if (group.length <= 1) continue;
+    const keeper =
+      group.find((c) => c.promptN === tn) ??
+      group.find((c) => used.has(c.id)) ??
+      [...group].sort((a, b) => {
+        const aa = agents.find((x) => x.id === a.id);
+        const bb = agents.find((x) => x.id === b.id);
+        const aAct = aa && ACTIVE.has(String(aa.state)) ? 0 : 1;
+        const bAct = bb && ACTIVE.has(String(bb.state)) ? 0 : 1;
+        if (aAct !== bAct) return aAct - bAct;
+        return (aa?.ageMs ?? 0) - (bb?.ageMs ?? 0);
+      })[0];
+    for (const c of group) {
+      if (c.id === keeper?.id) continue;
+      if (c.promptN === tn) continue;
+      const ag = agents.find((x) => x.id === c.id);
+      if (ag && ACTIVE.has(String(ag.state))) {
+        pool.push(c);
+      } else {
+        // Inactivo con sticky contaminado → limpiar
+        clearTitulo(stateDir, c.id);
+        c.tituloN = '';
+        updated++;
+      }
+    }
+  }
+  pool.sort((a, b) => {
+    const aa = agents.find((x) => x.id === a.id);
+    const bb = agents.find((x) => x.id === b.id);
+    return (aa?.ageMs ?? 0) - (bb?.ageMs ?? 0);
+  });
   const ownedTitulos = new Set(
     cands.filter((c) => c.tituloN && uiNormSet.has(c.tituloN)).map((c) => c.tituloN),
   );
   freeUi = uiTitles.filter((t) => !ownedTitulos.has(norm(t)));
-  if (freeUi.length > 0) {
-    const byTit = new Map<string, typeof cands>();
-    for (const c of cands) {
-      if (!c.tituloN || !uiNormSet.has(c.tituloN)) continue;
-      const arr = byTit.get(c.tituloN) ?? [];
-      arr.push(c);
-      byTit.set(c.tituloN, arr);
-    }
-    const pool: typeof cands = [];
-    for (const [, group] of byTit) {
-      if (group.length <= 1) continue;
-      const keeper =
-        group.find((c) => used.has(c.id)) ??
-        [...group].sort((a, b) => {
-          const aa = agents.find((x) => x.id === a.id);
-          const bb = agents.find((x) => x.id === b.id);
-          const aAct = aa && ACTIVE.has(String(aa.state)) ? 0 : 1;
-          const bAct = bb && ACTIVE.has(String(bb.state)) ? 0 : 1;
-          if (aAct !== bAct) return aAct - bAct;
-          return (aa?.ageMs ?? 0) - (bb?.ageMs ?? 0);
-        })[0];
-      for (const c of group) {
-        if (c.id === keeper?.id || used.has(c.id)) continue;
-        const ag = agents.find((x) => x.id === c.id);
-        if (ag && ACTIVE.has(String(ag.state))) pool.push(c);
-      }
-    }
-    pool.sort((a, b) => {
-      const aa = agents.find((x) => x.id === a.id);
-      const bb = agents.find((x) => x.id === b.id);
-      return (aa?.ageMs ?? 0) - (bb?.ageMs ?? 0);
-    });
-    for (const title of freeUi) {
-      const next = pool.shift();
-      if (!next) break;
-      const titleN = norm(title);
-      if (next.tituloN === titleN) {
-        used.add(next.id);
-        continue;
-      }
-      writeTitulo(stateDir, next.id, title);
-      next.tituloN = titleN;
+  for (const title of freeUi) {
+    const titleN = norm(title);
+    // Preferir surplus cuyo prompt sea este tab
+    let nextIdx = pool.findIndex((c) => c.promptN === titleN);
+    if (nextIdx < 0) nextIdx = pool.length > 0 ? 0 : -1;
+    if (nextIdx < 0) break;
+    const next = pool.splice(nextIdx, 1)[0]!;
+    if (next.tituloN === titleN) {
       used.add(next.id);
-      updated++;
+      continue;
+    }
+    if (assign(next.id, title)) {
       ownedTitulos.add(titleN);
     }
   }
 
   cachedFocusedTitles = focused;
   cachedUiTitles = uiTitles;
-  // Preferir agente activo si hay títulos duplicados (no marcar visto al terminado hermano)
   cachedFocusedIds = resolveFocusedIds(stateDir, agents, focused);
 
   return updated;

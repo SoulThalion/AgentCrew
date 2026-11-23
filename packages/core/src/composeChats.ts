@@ -129,6 +129,24 @@ export function composeChats(
   const used = new Set<string>();
   const assigned = new Map<number, AgentSlot>();
   const unmatchedIdx: number[] = [];
+  const clavesUi = new Set(uiTitles.map(normalizeTitle).filter(Boolean));
+
+  /** ¿Prompt del hermano apunta a otro tab UI abierto? → no ocultar. */
+  function promptOwnsOtherUi(id: string, currentClave: string): boolean {
+    const prompt = readPromptNorm(stateDir, id);
+    if (!prompt || prompt === currentClave) return false;
+    return clavesUi.has(prompt);
+  }
+
+  function consumeInactiveSiblings(clave: string): void {
+    for (const a of rawAgents) {
+      if (used.has(a.id)) continue;
+      if (ACTIVE.has(String(a.state))) continue;
+      if (promptOwnsOtherUi(a.id, clave)) continue;
+      const tit = normalizeTitle(readTitulo(stateDir, a.id));
+      if (tit && tit === clave) used.add(a.id);
+    }
+  }
 
   for (let i = 0; i < uiTitles.length; i++) {
     const title = uiTitles[i]!;
@@ -149,21 +167,14 @@ export function composeChats(
     if (elegido) {
       used.add(elegido.id);
       assigned.set(i, elegido);
-      // Hermanos mismo título: solo consumir inactivos (terminado/etc).
-      // Activos mal etiquetados pueden ser otro chat UI (p.ej. MiraiWay).
-      for (const a of rawAgents) {
-        if (used.has(a.id)) continue;
-        if (ACTIVE.has(String(a.state))) continue;
-        const tit = normalizeTitle(readTitulo(stateDir, a.id));
-        if (tit && tit === clave) used.add(a.id);
-      }
+      // Hermanos inactivos mismo sticky — no si su prompt es otro tab UI.
+      consumeInactiveSiblings(clave);
     } else {
       unmatchedIdx.push(i);
     }
   }
 
   // Renombre 1:1 (legacy)
-  const clavesUi = new Set(uiTitles.map(normalizeTitle).filter(Boolean));
   const huerfanos = rawAgents.filter((a) => {
     if (used.has(a.id)) return false;
     const tit = normalizeTitle(readTitulo(stateDir, a.id));
@@ -176,16 +187,10 @@ export function composeChats(
     used.add(h.id);
     assigned.set(i, h);
     unmatchedIdx.length = 0;
-    const clave = normalizeTitle(uiTitles[i]!);
-    for (const a of rawAgents) {
-      if (used.has(a.id)) continue;
-      if (ACTIVE.has(String(a.state))) continue;
-      const tit = normalizeTitle(readTitulo(stateDir, a.id));
-      if (tit && tit === clave) used.add(a.id);
-    }
+    consumeInactiveSiblings(normalizeTitle(uiTitles[i]!));
   }
 
-  // UI sin match + agente activo sobrante (título duplicado/sticky malo) → rellenar
+  // UI sin match: primero por prompt; luego surplus sticky duplicado / activos libres
   const stillUnmatched = uiTitles
     .map((_, i) => i)
     .filter((i) => !assigned.has(i));
@@ -195,9 +200,8 @@ export function composeChats(
       const t = normalizeTitle(readTitulo(stateDir, a.id));
       if (t) assignedTitulos.add(t);
     }
-    const unusedActive = rawAgents.filter(
-      (a) => !used.has(a.id) && ACTIVE.has(String(a.state)),
-    );
+    const unused = rawAgents.filter((a) => !used.has(a.id));
+    const unusedActive = unused.filter((a) => ACTIVE.has(String(a.state)));
     const surplus = unusedActive.filter((a) => {
       const t = normalizeTitle(readTitulo(stateDir, a.id));
       return Boolean(t && assignedTitulos.has(t));
@@ -206,8 +210,21 @@ export function composeChats(
       (a, b) => a.ageMs - b.ageMs,
     );
     for (const i of stillUnmatched) {
-      const pick = pool.shift();
-      if (!pick) break;
+      if (assigned.has(i)) continue;
+      const clave = normalizeTitle(uiTitles[i]!);
+      // Prompt exacto (activo o no) gana a surplus aleatorio → evita estados cruzados
+      const byPrompt = unused.find(
+        (a) => !used.has(a.id) && readPromptNorm(stateDir, a.id) === clave,
+      );
+      let pick = byPrompt ?? null;
+      if (!pick) {
+        const idx = pool.findIndex((a) => !used.has(a.id));
+        if (idx >= 0) pick = pool.splice(idx, 1)[0] ?? null;
+      } else {
+        const pi = pool.findIndex((a) => a.id === pick!.id);
+        if (pi >= 0) pool.splice(pi, 1);
+      }
+      if (!pick) continue;
       used.add(pick.id);
       assigned.set(i, pick);
     }
