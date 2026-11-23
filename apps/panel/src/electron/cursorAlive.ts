@@ -5,7 +5,7 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 
-const CACHE_MS = 4000;
+const CACHE_MS = 800;
 let cache: { at: number; alive: boolean } | null = null;
 
 function cursorAliveWin(): Promise<boolean> {

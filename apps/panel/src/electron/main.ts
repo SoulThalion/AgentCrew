@@ -55,8 +55,8 @@ import { pathToFileURL } from 'node:url';
 import { readTitulo, writeTitulo } from '@agentcrew/core';
 
 const STRIP_WIDTH = 72;
-/** Segundos sin Cursor IDE antes de auto-cerrar el panel (watcher lo reabre). */
-const CURSOR_GONE_GRACE_MS = 10_000;
+/** Sin Cursor IDE → cerrar panel al siguiente poll (watcher lo reabre al volver). */
+const CURSOR_GONE_GRACE_MS = 0;
 const gotLock = app.requestSingleInstanceLock();
 
 let mainWindow: BrowserWindow | null = null;
@@ -608,8 +608,8 @@ function startWatchers(): void {
         maybeAnnounceUso();
       });
     }
-    // ~cada 6.4s (+ cache 4s en isCursorAlive)
-    if (learnTick % 4 === 0) checkCursorStillThere();
+    // Cada poll (~1.6s); grace 0 → sale en el primer tick sin Cursor
+    checkCursorStillThere();
     // ~cada 96s: muestra RSS/heap (diagnóstico fuga)
     if (learnTick % 60 === 0) logMemSample();
   }, POLL_MS);
