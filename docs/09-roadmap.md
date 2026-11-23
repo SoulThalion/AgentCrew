@@ -55,3 +55,5 @@
 1. Focus Cursor Mac/Linux
 2. Icono/firma code-sign del .exe
 3. Paridad animaciones legacy (obra/subagentes)
+
+Hecho reciente: Cast Google Home (MP3 AgentCrew, Settings) — `docs/16-plan-cast.md`

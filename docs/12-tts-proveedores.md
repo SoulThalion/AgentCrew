@@ -37,6 +37,10 @@ Compatible en paralelo con Fish: un **proveedor activo** a la vez (setting `tts.
 3. Llamada API proveedor activo → guardar cache
 4. Fallback TTS del sistema (OneCore / say / espeak)
 
+## Cast / Google Home (opcional)
+
+Misma frase MP3 vía Google Cast (no voz Google). Toggle en Settings. Plan: `docs/16-plan-cast.md`.
+
 ## Abstracción código
 
 ```text

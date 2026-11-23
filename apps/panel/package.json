@@ -20,6 +20,7 @@
     "@agentcrew/dock-macos": "*",
     "@agentcrew/dock-windows": "*",
     "@agentcrew/tts": "*",
+    "@agentcrew/cast": "*",
     "koffi": "^2.9.0"
   },
   "devDependencies": {

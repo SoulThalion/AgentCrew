@@ -59,6 +59,14 @@ for (const [event, entries] of Object.entries(newHooks.hooks || {})) {
   current.hooks[event] = merged;
 }
 
+// subagentStop no debe limpiar: Cursor envía conversation_id del padre
+if (Array.isArray(current.hooks.subagentStop)) {
+  current.hooks.subagentStop = current.hooks.subagentStop.filter(
+    (e) => !String(e.command || '').includes('agentcrew-hook'),
+  );
+  if (current.hooks.subagentStop.length === 0) delete current.hooks.subagentStop;
+}
+
 fs.writeFileSync(hooksPath, JSON.stringify(current, null, 2), 'utf8');
 
 // Limpieza de dists rotos de la instalación anterior

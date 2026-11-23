@@ -103,7 +103,39 @@ if (process.platform === 'win32') {
   );
 }
 
-// Arrancar watcher ahora (si no hay otro)
+// Matar watcher previo (si no, el nuevo sale por lock y queda código viejo)
+const watchPidPath = path.join(stateDir, 'cursor-watch.pid');
+function pidAlive(pid) {
+  if (!pid || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+try {
+  if (fs.existsSync(watchPidPath)) {
+    const prev = Number.parseInt(fs.readFileSync(watchPidPath, 'utf8').trim(), 10);
+    if (pidAlive(prev)) {
+      try {
+        process.kill(prev);
+        console.log('Watcher viejo detenido pid=', prev);
+      } catch (e) {
+        console.warn('No se pudo matar watcher', prev, e.message);
+      }
+    }
+    try {
+      fs.unlinkSync(watchPidPath);
+    } catch {
+      /* ignore */
+    }
+  }
+} catch {
+  /* ignore */
+}
+
+// Arrancar watcher fresco
 try {
   const child = spawn(process.execPath, [watchDst], {
     detached: true,

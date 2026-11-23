@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('agentcrew', {
     ipcRenderer.invoke('settings:save', patch),
   testVoice: (text?: string): Promise<unknown> =>
     ipcRenderer.invoke('settings:test', text),
+  discoverCast: (): Promise<unknown> => ipcRenderer.invoke('cast:discover'),
+  testCast: (): Promise<unknown> => ipcRenderer.invoke('cast:test'),
   openSettings: (): Promise<boolean> => ipcRenderer.invoke('settings:open'),
   openFishPortal: (): Promise<{ ok: boolean; url: string }> =>
     ipcRenderer.invoke('fish:openPortal'),

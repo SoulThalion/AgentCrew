@@ -30,10 +30,14 @@ const logPath = path.join(stateDir, 'cursor-watch.log');
 
 const POLL_MS = 2000;
 const START_COOLDOWN_MS = 15_000;
+/** Tras Cursor muerto, pedir al panel que salga (backup del auto-quit interno). */
+const CLOSE_PANEL_GRACE_MS = 5_000;
 
 let lastStart = 0;
 /** Último tick: ¿Cursor vivo? Para detectar edge down→up. */
 let cursorWas = null;
+/** Desde cuándo Cursor no aparece (para cerrar.txt). */
+let cursorGoneSince = 0;
 
 function claimWatchLock() {
   try {
@@ -175,6 +179,26 @@ function loadLaunch() {
   }
 }
 
+function requestPanelShow() {
+  try {
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(path.join(stateDir, 'mostrar.txt'), '1', 'utf8');
+    log('mostrar.txt (Cursor up / panel ya corría)');
+  } catch {
+    /* ignore */
+  }
+}
+
+function requestPanelClose() {
+  try {
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(path.join(stateDir, 'cerrar.txt'), '1', 'utf8');
+    log('cerrar.txt (Cursor gone)');
+  } catch {
+    /* ignore */
+  }
+}
+
 function startPanel() {
   if (Date.now() - lastStart < START_COOLDOWN_MS) return;
   if (panelRunning()) return;
@@ -205,22 +229,32 @@ async function tick() {
   if (disabled()) return;
   const cursor = await cursorRunning();
 
-  // Edge Cursor off→on: usuario cerró panel; ahora IDE vuelve → permitir auto-start
+  // Edge Cursor off→on: permitir auto-start + mostrar si panel quedó oculto
   if (cursorWas === false && cursor === true) {
     clearUserClosed();
+    if (panelRunning()) requestPanelShow();
   }
-  if (cursorWas === null) {
-    // Primer tick: no limpiar latch (respeta cierre previo si Cursor ya estaba)
-    cursorWas = cursor;
-  } else {
-    cursorWas = cursor;
+  // Primer tick con Cursor ya abierto + panel vivo → mostrar (no solo “ya corre”)
+  if (cursorWas === null && cursor && panelRunning() && !userClosed()) {
+    requestPanelShow();
+  }
+  cursorWas = cursor;
+
+  if (!cursor) {
+    if (!cursorGoneSince) cursorGoneSince = Date.now();
+    if (
+      panelRunning() &&
+      Date.now() - cursorGoneSince >= CLOSE_PANEL_GRACE_MS
+    ) {
+      requestPanelClose();
+    }
+    return;
   }
 
-  if (!cursor) return;
+  cursorGoneSince = 0;
   if (userClosed()) return;
   if (!panelRunning()) startPanel();
 }
-
 claimWatchLock();
 process.on('exit', releaseWatchLock);
 process.on('SIGINT', () => {

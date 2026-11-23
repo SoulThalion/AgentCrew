@@ -3,13 +3,15 @@ import path from 'node:path';
 import { isAgentState, isActiveStale, priorityOf, type AgentState } from './states.js';
 import {
   applyDisplayPose,
+  clearTitulo,
   countSubagentes,
   displayTitle,
+  isGhostBusyState,
   parseEstadoLine,
   readFrase,
   resolveActiveState,
 } from './stateStore.js';
-import { readText } from './atomicWrite.js';
+import { readText, removeFile } from './atomicWrite.js';
 
 export type AgentSlot = {
   id: string;
@@ -67,6 +69,12 @@ export function listAgents(stateDir: string, opts: ListAgentsOptions = {}): Agen
       continue;
     }
     const parsed = parseEstadoLine(raw);
+    // Fantasma activo (Task/QA sin prompt/run): borrar y no mostrar
+    if (isGhostBusyState(stateDir, id, parsed.state)) {
+      removeFile(full);
+      clearTitulo(stateDir, id);
+      continue;
+    }
     const valor = resolveActiveState(stateDir, id, parsed.state);
     const when = parsed.at ?? fs.statSync(full).mtime;
     const ageMs = now.getTime() - when.getTime();

@@ -54,9 +54,13 @@
 - [x] Issue #2: sticky unico + compose no cruza hermanos (prompt→otro tab)
 - [x] Issue #3: error-pending 6s (no falso sonar) + compose fuzzy / sin fill tab idle
 - [x] Sonar: stop+pregunta no duplica fin (ultima=pregunta → esperando, sin fin)
-- [x] Pending approval: shell-antes → esperando; sonar tras grace 1.5s (auto-run limpia)
+- [x] Pending approval voz: solo smart (`request_smart_mode_approval`); no grace shell-antes (falsos +)
 - [x] RAM main: hover sin loadURL repetido; dock place solo ABN_POSCHANGED; tasklist filtrado
 - [x] Perf: scrape UIA PS persistente; poll 1.6s; scrape 6–13s; RAF solo poses animadas
+- [x] **Cast** (MP3 AgentCrew, Settings on/off + dispositivo) — `16-plan-cast.md` C0–C3
+- [x] Watcher: install mata viejo; Cursor down→cerrar.txt; up→mostrar.txt
+- [x] Fantasmas Planificando (Task/QA): `isTrackedChat` + prune `isGhostBusyState`; no `subagentStop→sessionEnd`
+- [x] Sprite doble Terminado/sin frase: bind activo huérfano↔UI libre (ignora sticky de chats cerrados)
 - [ ] Focus Cursor Mac/Linux
 - [ ] QA subagente (límite modelo)
 

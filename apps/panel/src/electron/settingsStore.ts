@@ -6,8 +6,11 @@ import {
   type TtsSettings,
   type TtsProviderId,
 } from '@agentcrew/tts';
+import { DEFAULT_CAST_SETTINGS, type CastSettings } from '@agentcrew/cast';
 
 const FILE = 'tts-settings.json';
+
+export type AppSettings = TtsSettings & CastSettings;
 
 function settingsPath(): string {
   return path.join(app.getPath('userData'), FILE);
@@ -29,22 +32,42 @@ function dec(value: string): string {
   }
 }
 
-type Stored = Omit<TtsSettings, 'fishApiKey' | 'elevenApiKey'> & {
-  fishApiKeyEnc: string;
-  elevenApiKeyEnc: string;
-};
+type Stored = Omit<TtsSettings, 'fishApiKey' | 'elevenApiKey'> &
+  CastSettings & {
+    fishApiKeyEnc: string;
+    elevenApiKeyEnc: string;
+  };
 
-export function loadSettings(): TtsSettings {
+export function defaultAppSettings(): AppSettings {
+  return {
+    ...DEFAULT_TTS_SETTINGS,
+    ...DEFAULT_CAST_SETTINGS,
+    fishApiKey:
+      process.env.FISH_AUDIO_API_KEY?.trim() ||
+      process.env.FISH_API_KEY?.trim() ||
+      '',
+  };
+}
+
+function castFromRaw(raw: Partial<CastSettings>): CastSettings {
+  return {
+    castEnabled: Boolean(raw.castEnabled),
+    castPlayLocal:
+      raw.castPlayLocal === undefined ? true : Boolean(raw.castPlayLocal),
+    castDeviceName: typeof raw.castDeviceName === 'string' ? raw.castDeviceName : '',
+    castDeviceHost: typeof raw.castDeviceHost === 'string' ? raw.castDeviceHost : '',
+    castHttpPort:
+      typeof raw.castHttpPort === 'number' && raw.castHttpPort > 0
+        ? raw.castHttpPort
+        : DEFAULT_CAST_SETTINGS.castHttpPort,
+    castAnnounceIp:
+      typeof raw.castAnnounceIp === 'string' ? raw.castAnnounceIp : '',
+  };
+}
+
+export function loadSettings(): AppSettings {
   const p = settingsPath();
-  if (!fs.existsSync(p)) {
-    return {
-      ...DEFAULT_TTS_SETTINGS,
-      fishApiKey:
-        process.env.FISH_AUDIO_API_KEY?.trim() ||
-        process.env.FISH_API_KEY?.trim() ||
-        '',
-    };
-  }
+  if (!fs.existsSync(p)) return defaultAppSettings();
   try {
     const raw = JSON.parse(fs.readFileSync(p, 'utf8')) as Stored;
     return {
@@ -61,13 +84,14 @@ export function loadSettings(): TtsSettings {
       elevenApiKey: dec(raw.elevenApiKeyEnc || ''),
       elevenVoiceId: raw.elevenVoiceId || '',
       elevenModel: raw.elevenModel || DEFAULT_TTS_SETTINGS.elevenModel,
+      ...castFromRaw(raw),
     };
   } catch {
-    return { ...DEFAULT_TTS_SETTINGS };
+    return defaultAppSettings();
   }
 }
 
-export function saveSettings(settings: TtsSettings): void {
+export function saveSettings(settings: AppSettings): void {
   const stored: Stored = {
     provider: settings.provider,
     muted: settings.muted,
@@ -78,13 +102,19 @@ export function saveSettings(settings: TtsSettings): void {
     elevenApiKeyEnc: enc(settings.elevenApiKey),
     elevenVoiceId: settings.elevenVoiceId,
     elevenModel: settings.elevenModel,
+    castEnabled: settings.castEnabled,
+    castPlayLocal: settings.castPlayLocal,
+    castDeviceName: settings.castDeviceName,
+    castDeviceHost: settings.castDeviceHost,
+    castHttpPort: settings.castHttpPort,
+    castAnnounceIp: settings.castAnnounceIp,
   };
   fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
   fs.writeFileSync(settingsPath(), JSON.stringify(stored, null, 2), 'utf8');
 }
 
 /** Vista segura para renderer (keys enmascaradas). */
-export function settingsPublic(settings: TtsSettings) {
+export function settingsPublic(settings: AppSettings) {
   return {
     ...settings,
     fishApiKey: settings.fishApiKey ? '********' : '',

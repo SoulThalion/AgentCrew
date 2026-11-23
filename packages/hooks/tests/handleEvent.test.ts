@@ -165,6 +165,47 @@ describe('handleEvent', () => {
     );
   });
 
+  it('pensamiento sin prompt/run no crea planificando fantasma', () => {
+    handleEvent(
+      'pensamiento',
+      JSON.stringify({ conversation_id: 'ghost1' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'estado-ghost1.txt'))).toBe(false);
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'ok1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'pensamiento',
+      JSON.stringify({ conversation_id: 'ok1' }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'estado-ok1.txt'), 'utf8').startsWith('planificando|')).toBe(
+      true,
+    );
+  });
+
+  it('espera-fin / leyendo de Task sin prompt no crea fantasma', () => {
+    handleEvent(
+      'espera-fin',
+      JSON.stringify({ conversation_id: 'qa1', tool_name: 'AskQuestion' }),
+      dir,
+    );
+    handleEvent(
+      'leyendo',
+      JSON.stringify({ conversation_id: 'qa1' }),
+      dir,
+    );
+    handleEvent(
+      'herramienta-fin',
+      JSON.stringify({ conversation_id: 'qa1' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'estado-qa1.txt'))).toBe(false);
+  });
+
   it('respuesta con ? → esperando', () => {
     handleEvent(
       'prompt',
@@ -181,7 +222,7 @@ describe('handleEvent', () => {
     );
   });
 
-  it('shell-antes → esperando + flag (sin sonar inmediato)', () => {
+  it('shell-antes auto-run: shell flag, sin esperando/aprobacion/sonar', () => {
     handleEvent(
       'prompt',
       JSON.stringify({ conversation_id: 'sh1', prompt: 'x', composer_mode: 'agent' }),
@@ -193,14 +234,15 @@ describe('handleEvent', () => {
       dir,
     );
     expect(r.stdout).toBe('{"permission":"allow"}');
-    expect(fs.readFileSync(path.join(dir, 'estado-sh1.txt'), 'utf8').startsWith('esperando|')).toBe(
+    expect(fs.readFileSync(path.join(dir, 'estado-sh1.txt'), 'utf8').startsWith('trabajando|')).toBe(
       true,
     );
-    expect(fs.existsSync(path.join(dir, 'aprobacion-sh1.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'shell-sh1.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'aprobacion-sh1.txt'))).toBe(false);
     expect(fs.existsSync(path.join(dir, 'sonar-sh1.txt'))).toBe(false);
   });
 
-  it('shell-despues (auto-run) limpia → trabajando sin sonar', () => {
+  it('shell-despues limpia shell; estado sigue trabajando sin sonar', () => {
     handleEvent(
       'prompt',
       JSON.stringify({ conversation_id: 'sh2', prompt: 'x', composer_mode: 'agent' }),
@@ -216,6 +258,7 @@ describe('handleEvent', () => {
       JSON.stringify({ conversation_id: 'sh2', command: 'ls', output: 'ok' }),
       dir,
     );
+    expect(fs.existsSync(path.join(dir, 'shell-sh2.txt'))).toBe(false);
     expect(fs.existsSync(path.join(dir, 'aprobacion-sh2.txt'))).toBe(false);
     expect(fs.existsSync(path.join(dir, 'sonar-sh2.txt'))).toBe(false);
     expect(fs.readFileSync(path.join(dir, 'estado-sh2.txt'), 'utf8').startsWith('trabajando|')).toBe(
@@ -223,7 +266,7 @@ describe('handleEvent', () => {
     );
   });
 
-  it('tool-fail Shell limpia aprobación pendiente', () => {
+  it('tool-fail Shell limpia shell; no inventa aprobación', () => {
     handleEvent(
       'prompt',
       JSON.stringify({ conversation_id: 'sh3', prompt: 'x', composer_mode: 'agent' }),
@@ -243,6 +286,7 @@ describe('handleEvent', () => {
       }),
       dir,
     );
+    expect(fs.existsSync(path.join(dir, 'shell-sh3.txt'))).toBe(false);
     expect(fs.existsSync(path.join(dir, 'aprobacion-sh3.txt'))).toBe(false);
     expect(fs.readFileSync(path.join(dir, 'estado-sh3.txt'), 'utf8').startsWith('trabajando|')).toBe(
       true,
@@ -286,5 +330,31 @@ describe('handleEvent', () => {
       true,
     );
     expect(fs.existsSync(path.join(dir, 'sonar-sm2.txt'))).toBe(false);
+  });
+
+  it('sessionEnd limpia estado del chat', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'sub1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'estado-sub1.txt'))).toBe(true);
+    handleEvent(
+      'sessionEnd',
+      JSON.stringify({ conversation_id: 'sub1' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'estado-sub1.txt'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'prompt-sub1.txt'))).toBe(false);
+  });
+
+  it('stop sin prompt/run no crea terminado fantasma', () => {
+    handleEvent(
+      'stop',
+      JSON.stringify({ conversation_id: 'ghost-stop', status: 'completed' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'estado-ghost-stop.txt'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'sonar-ghost-stop.txt'))).toBe(false);
   });
 });

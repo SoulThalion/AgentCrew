@@ -12,8 +12,9 @@ Cada entrada: comando CLI Node (objetivo) con timeout corto; stdin = JSON del ev
 | `beforeSubmitPrompt` | — | prompt → estado trabajando/planificando; marcar run; asegurar panel |
 | `preToolUse` SwitchMode | SwitchMode | modo; estado `esperando` |
 | `preToolUse` AskQuestion | AskQuestion | espera |
-| `beforeShellExecution` | — | marca aprobación + `esperando` (sonar tras grace en panel) |
-| `afterShellExecution` | — | auto-run / ya ejecutó → quita flag (sin aviso) |
+| `beforeShellExecution` | — | marca `shell-*` only (no sonar: auto-run indistinguible) |
+| `afterShellExecution` | — | limpia `shell-*`; si había smart-aprobación → trabajando |
+| `preToolUse` Shell smart | `request_smart_mode_approval` | `esperando` + sonar `aprobacion` |
 | `postToolUseFailure` Shell | Shell | reject/deny → quita espera |
 | `preToolUse` Shell | Shell | si smart approval → aprobación + espera + sonar |
 | `preToolUse` WebSearch | WebSearch | búsqueda + espera + sonar |
@@ -23,9 +24,10 @@ Cada entrada: comando CLI Node (objetivo) con timeout corto; stdin = JSON del ev
 | `postToolUse` Task | fin subagente | quitar sub; ajustar estado |
 | `postToolUse` (resto) | herramienta-fin | leyendo→trabajando/plan |
 | `afterAgentResponse` | — | frase; si pregunta → espera |
-| `afterAgentThought` | — | trabajando→planificando (solo ese caso) |
-| `stop` | — | terminado/error/detenido + sonar |
+| `afterAgentThought` | — | trabajando→planificando solo si chat tracked (prompt/run) |
+| `stop` | — | terminado/error/detenido + sonar; ignora id sin prompt/run |
 | `sessionEnd` | — | limpiar archivos del id |
+| `subagentStop` | — | **no** hookear: Cursor manda `conversation_id` del padre |
 
 ## CLI objetivo
 

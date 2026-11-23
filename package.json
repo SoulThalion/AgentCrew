@@ -8,20 +8,24 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build -w @agentcrew/core && npm run build -w @agentcrew/hooks && npm run build -w @agentcrew/tts && npm run build -w @agentcrew/dock-windows && npm run build -w @agentcrew/dock-macos && npm run build -w @agentcrew/dock-linux && npm run build -w @agentcrew/panel",
-    "test": "npm run test -w @agentcrew/core && npm run test -w @agentcrew/hooks && npm run test -w @agentcrew/tts && npm run test -w @agentcrew/dock-windows",
+    "build": "npm run build -w @agentcrew/core && npm run build -w @agentcrew/hooks && npm run build -w @agentcrew/tts && npm run build -w @agentcrew/cast && npm run build -w @agentcrew/dock-windows && npm run build -w @agentcrew/dock-macos && npm run build -w @agentcrew/dock-linux && npm run build -w @agentcrew/panel",
+    "test": "npm run test -w @agentcrew/core && npm run test -w @agentcrew/hooks && npm run test -w @agentcrew/tts && npm run test -w @agentcrew/cast && npm run test -w @agentcrew/dock-windows",
     "typecheck": "npm run typecheck -w @agentcrew/core && npm run typecheck -w @agentcrew/hooks",
     "install-hooks": "npm run build -w @agentcrew/core && npm run build -w @agentcrew/hooks && node scripts/install-hooks.mjs",
     "install-watch": "node scripts/install-cursor-watch.mjs",
     "install:all": "node installer/install.mjs",
     "panel": "npm run dev -w @agentcrew/panel",
     "panel:start": "npm run start -w @agentcrew/panel",
-    "panel:dist": "npm run build && npm run dist -w @agentcrew/panel"
+    "panel:dist": "npm run build && npm run dist -w @agentcrew/panel",
+    "cast:list": "node scripts/cast-smoke.mjs --list",
+    "cast:smoke": "node scripts/cast-smoke.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
+    "bonjour-service": "^1.4.4",
+    "castv2-client": "^1.2.0",
     "esbuild": "^0.28.2"
   }
 }

@@ -90,6 +90,11 @@ export function clearRun(stateDir: string, id: string): void {
   removeFile(fileRun(stateDir, id));
 }
 
+export function hasPrompt(stateDir: string, id: string): boolean {
+  const raw = readText(filePrompt(stateDir, id));
+  return Boolean(raw?.trim());
+}
+
 export function hasRun(stateDir: string, id: string): boolean {
   return fs.existsSync(fileRun(stateDir, id));
 }
@@ -237,6 +242,28 @@ export function clearSubagentes(stateDir: string, id: string): void {
   }
 }
 
+const ACTIVE_BUSY: ReadonlySet<string> = new Set([
+  'trabajando',
+  'planificando',
+  'leyendo',
+  'subagentes',
+]);
+
+/**
+ * Subagentes Task / thoughts sin prompt de usuario dejan planificando huérfano.
+ * Sin run ni prompt → no es chat real.
+ */
+export function isGhostBusyState(
+  stateDir: string,
+  id: string,
+  valor: string,
+): boolean {
+  if (!ACTIVE_BUSY.has(valor)) return false;
+  if (hasRun(stateDir, id)) return false;
+  if (hasPrompt(stateDir, id)) return false;
+  return true;
+}
+
 /** Si hay run y estado vacío/cerrado → seguir trabajando/planificando. */
 export function resolveActiveState(
   stateDir: string,
@@ -245,14 +272,11 @@ export function resolveActiveState(
 ): string {
   if (!hasRun(stateDir, id)) {
     // stop limpió run pero status raro dejó "trabajando" → UI idle = detenido
-    if (
-      valor === 'trabajando' ||
-      valor === 'planificando' ||
-      valor === 'leyendo' ||
-      valor === 'subagentes'
-    ) {
+    if (ACTIVE_BUSY.has(valor)) {
       const ultima = readText(fileUltima(stateDir, id));
       if (ultima === 'cierre') return 'detenido';
+      // Fantasma (p.ej. Task/QA sin beforeSubmitPrompt) → no activo
+      if (!hasPrompt(stateDir, id)) return 'detenido';
     }
     return valor;
   }

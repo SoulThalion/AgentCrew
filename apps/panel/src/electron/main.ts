@@ -10,19 +10,26 @@ import fs from 'node:fs';
 import {
   defaultStateDir,
   composeChats,
+  recordedVoicePath,
   type AgentSlot,
   STATE_COLORS,
   STATE_LABELS,
   isAgentState,
 } from '@agentcrew/core';
 import {
-  DEFAULT_TTS_SETTINGS,
   ensureDirs,
   speakTipo,
   resolveAndSpeak,
-  type TtsSettings,
+  type SpeakOptions,
 } from '@agentcrew/tts';
-import { loadSettings, saveSettings, settingsPublic } from './settingsStore';
+import {
+  defaultAppSettings,
+  loadSettings,
+  saveSettings,
+  settingsPublic,
+  type AppSettings,
+} from './settingsStore';
+import { listCastDevices, playMp3OnChosenCast, stopCastHttp } from './castRuntime';
 import { loadPanelPrefs, savePanelPrefs, type PanelPrefs } from './panelPrefs';
 import {
   loadStatePrefs,
@@ -60,7 +67,8 @@ const STRIP_WIDTH = 72;
  * ≥10s: varios ticks fallidos seguidos; evita bucle quit/relanzar si tasklist
  * falla bajo carga (issue #1). Watcher reabre al volver el IDE.
  */
-const CURSOR_GONE_GRACE_MS = 12_000;
+/** Auto-quit si Cursor.exe no aparece. Watcher también escribe cerrar.txt ~5s. */
+const CURSOR_GONE_GRACE_MS = 8_000;
 const gotLock = app.requestSingleInstanceLock();
 
 let mainWindow: BrowserWindow | null = null;
@@ -68,7 +76,7 @@ let settingsWindow: BrowserWindow | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let cursorGoneSince = 0;
 let lastPayload = '';
-let ttsSettings: TtsSettings = { ...DEFAULT_TTS_SETTINGS };
+let ttsSettings: AppSettings = defaultAppSettings();
 const allDoneTracker = createAllDoneTracker();
 let speakChain: Promise<void> = Promise.resolve();
 
@@ -151,7 +159,13 @@ function trayHooks() {
     openSettings,
     testVoice: (tipo: string) => {
       syncTtsFromState();
-      void speakTipo(tipo, ttsSettings, speakPaths(), statePrefs.aviso);
+      void speakTipo(
+        tipo,
+        ttsSettings,
+        speakPaths(),
+        statePrefs.aviso,
+        speakCastOpts(),
+      );
     },
     onPrefs: (p: PanelStatePrefs) => {
       statePrefs = p;
@@ -180,13 +194,39 @@ function speakPaths() {
   return { vocesDir: voces, cacheDir: cache };
 }
 
+/** Cast on → afterMp3; playLocal según «También en este PC». */
+function speakCastOpts(): SpeakOptions | undefined {
+  if (!ttsSettings.castEnabled) return undefined;
+  const playLocal = ttsSettings.castPlayLocal;
+  return {
+    playLocal,
+    afterMp3: async (absPath) => {
+      try {
+        await playMp3OnChosenCast({
+          absPath,
+          host: ttsSettings.castDeviceHost,
+          name: ttsSettings.castDeviceName,
+          port: ttsSettings.castHttpPort,
+          announceIp: ttsSettings.castAnnounceIp,
+          holdMs: 8_000,
+        });
+      } catch (err) {
+        console.warn(
+          '[cast]',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    },
+  };
+}
+
 /** Paridad Avisar-Umbral-Uso tras refrescar / leer uso.txt. */
 function maybeAnnounceUso(): void {
   syncTtsFromState();
   announceUsoThresholds(stateDir(), {
     canSpeak: statePrefs.aviso === 'voz' && !statePrefs.muted,
     speak: (phrase) => {
-      void resolveAndSpeak(phrase, ttsSettings, speakPaths());
+      void resolveAndSpeak(phrase, ttsSettings, speakPaths(), speakCastOpts());
     },
   });
 }
@@ -421,6 +461,15 @@ function checkCursorStillThere(): void {
     }
     if (!cursorGoneSince) cursorGoneSince = Date.now();
     if (Date.now() - cursorGoneSince >= CURSOR_GONE_GRACE_MS) {
+      try {
+        fs.appendFileSync(
+          path.join(stateDir(), 'panel-error.log'),
+          `${new Date().toISOString()} quit: Cursor gone ≥${CURSOR_GONE_GRACE_MS}ms\n`,
+          'utf8',
+        );
+      } catch {
+        /* ignore */
+      }
       app.quit();
     }
   });
@@ -485,45 +534,12 @@ function confirmPendingErrors(): void {
   }
 }
 
-/**
- * beforeShellExecution marca aprobación; auto-run limpia en afterShellExecution.
- * Si el flag aguanta ~1.5 s → card Pending approval real → sonar una vez.
- */
-function confirmPendingApprovals(): void {
-  const dir = stateDir();
-  if (!fs.existsSync(dir)) return;
-  const now = Date.now();
-  for (const name of fs.readdirSync(dir)) {
-    if (!name.startsWith('aprobacion-') || !name.endsWith('.txt')) continue;
-    if (name.startsWith('aprobacion-said-')) continue;
-    const id = name.slice('aprobacion-'.length, -'.txt'.length);
-    if (!id) continue;
-    const full = path.join(dir, name);
-    const said = path.join(dir, `aprobacion-said-${id}.txt`);
-    if (fs.existsSync(said)) continue;
-    let at = 0;
-    try {
-      const raw = fs.readFileSync(full, 'utf8').trim();
-      at = Number.parseInt(raw, 10);
-      if (!Number.isFinite(at)) at = fs.statSync(full).mtimeMs;
-    } catch {
-      continue;
-    }
-    if (now - at < 1_500) continue;
-    try {
-      fs.writeFileSync(said, String(now), 'utf8');
-      fs.writeFileSync(path.join(dir, `sonar-${id}.txt`), 'aprobacion', 'utf8');
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
 function consumeSonar(): void {
   const dir = stateDir();
   if (!fs.existsSync(dir)) return;
   confirmPendingErrors();
-  confirmPendingApprovals();
+  // Sonar aprobación: solo hook smart (request_smart_mode_approval).
+  // Grace shell-antes→1.5s daba falsos positivos en auto-run largo.
   syncTtsFromState();
   const tipos: string[] = [];
   for (const name of fs.readdirSync(dir)) {
@@ -542,13 +558,25 @@ function consumeSonar(): void {
   noteDoneSonars(allDoneTracker, tipos);
   for (const tipo of tipos) {
     enqueueSpeak(() =>
-      speakTipo(tipo, ttsSettings, speakPaths(), statePrefs.aviso),
+      speakTipo(
+        tipo,
+        ttsSettings,
+        speakPaths(),
+        statePrefs.aviso,
+        speakCastOpts(),
+      ),
     );
   }
   // Último aviso de lote: varios agentes acabaron y usuario inactivo (o "siempre")
   if (takeAllDoneAnnounce(allDoneTracker, working, statePrefs.cuando)) {
     enqueueSpeak(() =>
-      speakTipo('todos', ttsSettings, speakPaths(), statePrefs.aviso),
+      speakTipo(
+        'todos',
+        ttsSettings,
+        speakPaths(),
+        statePrefs.aviso,
+        speakCastOpts(),
+      ),
     );
   }
 }
@@ -803,20 +831,53 @@ function registerIpc(): void {
     return true;
   });
   ipcMain.handle('settings:get', () => settingsPublic(ttsSettings));
-  ipcMain.handle('settings:save', (_e, patch: Partial<TtsSettings> & { fishApiKey?: string; elevenApiKey?: string }) => {
-    const next: TtsSettings = { ...ttsSettings, ...patch };
-    if (patch.fishApiKey === '********') next.fishApiKey = ttsSettings.fishApiKey;
-    if (patch.elevenApiKey === '********') next.elevenApiKey = ttsSettings.elevenApiKey;
-    if (patch.fishApiKey === '') next.fishApiKey = '';
-    if (patch.elevenApiKey === '') next.elevenApiKey = '';
-    if (patch.elevenApiKey === '') next.elevenApiKey = '';
-    ttsSettings = next;
-    saveSettings(ttsSettings);
-    return settingsPublic(ttsSettings);
-  });
+  ipcMain.handle(
+    'settings:save',
+    (_e, patch: Partial<AppSettings> & { fishApiKey?: string; elevenApiKey?: string }) => {
+      const next: AppSettings = { ...ttsSettings, ...patch };
+      if (patch.fishApiKey === '********') next.fishApiKey = ttsSettings.fishApiKey;
+      if (patch.elevenApiKey === '********') next.elevenApiKey = ttsSettings.elevenApiKey;
+      if (patch.fishApiKey === '') next.fishApiKey = '';
+      if (patch.elevenApiKey === '') next.elevenApiKey = '';
+      ttsSettings = next;
+      saveSettings(ttsSettings);
+      return settingsPublic(ttsSettings);
+    },
+  );
   ipcMain.handle('settings:test', async (_e, text?: string) => {
     const phrase = (text && String(text).trim()) || 'Prueba de voz AgentCrew.';
-    return resolveAndSpeak(phrase, ttsSettings, speakPaths());
+    return resolveAndSpeak(phrase, ttsSettings, speakPaths(), speakCastOpts());
+  });
+  ipcMain.handle('cast:discover', async () => {
+    try {
+      const devices = await listCastDevices(6000);
+      return { ok: true, devices };
+    } catch (err) {
+      return {
+        ok: false,
+        devices: [],
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+  ipcMain.handle('cast:test', async () => {
+    try {
+      const mp3 = recordedVoicePath(speakPaths().vocesDir, 'Señor, he terminado.');
+      if (!fs.existsSync(mp3)) {
+        return { ok: false, error: `Falta MP3: ${mp3}` };
+      }
+      const { device, url } = await playMp3OnChosenCast({
+        absPath: mp3,
+        host: ttsSettings.castDeviceHost,
+        name: ttsSettings.castDeviceName,
+        port: ttsSettings.castHttpPort,
+        announceIp: ttsSettings.castAnnounceIp,
+        holdMs: 10_000,
+      });
+      return { ok: true, device, url };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   });
   ipcMain.handle('settings:open', () => {
     openSettings();
@@ -932,5 +993,6 @@ if (!gotLock) {
     destroyTray();
     disposeUiaScraper();
     if (pollTimer) clearInterval(pollTimer);
+    void stopCastHttp();
   });
 }

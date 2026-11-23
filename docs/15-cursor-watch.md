@@ -8,8 +8,9 @@ Cursor **no** expone hook “IDE abierto”. Para abrir/cerrar el sidebar con el
 |--------|----------|
 | Login Windows | Startup lanza `agentcrew-cursor-watch.mjs` (oculto) |
 | Aparece `Cursor.exe` | Watcher arranca el panel si no corre |
-| Desaparece Cursor (~12 s grace) | El **panel** hace `app.quit()` (fail-open si `tasklist` falla) |
-| Vuelve a abrir Cursor | Watcher vuelve a arrancar el panel |
+| Desaparece Cursor (~5–8 s) | Watcher escribe `cerrar.txt`; panel también `app.quit()` |
+| Vuelve a abrir Cursor | Watcher arranca panel **o** escribe `mostrar.txt` si ya corría oculto |
+| `npm run install-watch` | **Mata** watcher viejo y lanza uno nuevo (antes el lock lo bloqueaba) |
 | Usuario **Salir** (bandeja / quit) | `panel-user-closed.txt` → watcher **no** relanza hasta que Cursor se apague y vuelva |
 
 El watcher **sigue vivo** sin Cursor (espera el próximo arranque del IDE).

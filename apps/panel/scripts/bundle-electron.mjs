@@ -16,10 +16,13 @@ await build({
   alias: {
     '@agentcrew/core': path.join(repoRoot, 'packages/core/src/index.ts'),
     '@agentcrew/tts': path.join(repoRoot, 'packages/tts/src/index.ts'),
+    '@agentcrew/cast': path.join(repoRoot, 'packages/cast/src/index.ts'),
   },
   external: [
     'electron',
     'koffi',
+    'castv2-client',
+    'bonjour-service',
     '@agentcrew/dock-windows',
     '@agentcrew/dock-macos',
     '@agentcrew/dock-linux',

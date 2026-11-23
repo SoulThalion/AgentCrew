@@ -13,17 +13,43 @@ export type SpeakPaths = {
 
 export type AvisoMode = 'voz' | 'sonido';
 
+export type SpeakOptions = {
+  /** Default true. false = solo afterMp3 (p.ej. Cast sin PC). */
+  playLocal?: boolean;
+  /** Tras resolver path MP3 (Cast, etc.). No se llama en beep/WAV. */
+  afterMp3?: (absPath: string) => void | Promise<void>;
+};
+
+async function emitMp3(
+  absPath: string,
+  volume: number,
+  opts?: SpeakOptions,
+): Promise<boolean> {
+  const playLocal = opts?.playLocal !== false;
+  const tasks: Promise<unknown>[] = [];
+  if (playLocal) tasks.push(playMp3(absPath, volume));
+  if (opts?.afterMp3) tasks.push(Promise.resolve(opts.afterMp3(absPath)));
+  if (!tasks.length) return false;
+  const results = await Promise.allSettled(tasks);
+  if (playLocal) {
+    const local = results[0];
+    return local?.status === 'fulfilled' && local.value === true;
+  }
+  return results.every((r) => r.status === 'fulfilled');
+}
+
 export async function resolveAndSpeak(
   text: string,
   settings: TtsSettings,
   paths: SpeakPaths,
+  opts?: SpeakOptions,
 ): Promise<SpeakResult> {
   if (settings.muted) return { ok: true, source: 'muted' };
   if (!text.trim()) return { ok: false, source: 'none' };
 
   const local = recordedVoicePath(paths.vocesDir, text);
   if (fs.existsSync(local) && fs.statSync(local).size >= 1000) {
-    const ok = await playMp3(local, settings.volume);
+    const ok = await emitMp3(local, settings.volume, opts);
     return { ok, source: 'local', path: local };
   }
 
@@ -38,7 +64,7 @@ export async function resolveAndSpeak(
   }
 
   if (remote) {
-    const ok = await playMp3(remote, settings.volume);
+    const ok = await emitMp3(remote, settings.volume, opts);
     return {
       ok,
       source: source === 'fish' || source === 'elevenlabs' ? source : 'cache',
@@ -46,6 +72,7 @@ export async function resolveAndSpeak(
     };
   }
 
+  if (opts?.playLocal === false) return { ok: false, source: 'none' };
   playSystemBeep();
   return { ok: true, source: 'system' };
 }
@@ -59,11 +86,13 @@ export async function speakTipo(
   settings: TtsSettings,
   paths: SpeakPaths,
   aviso: AvisoMode = 'voz',
+  opts?: SpeakOptions,
 ): Promise<SpeakResult> {
   if (settings.muted) return { ok: true, source: 'muted' };
 
   const wav = wavForTipo(tipo);
   if (aviso === 'sonido') {
+    if (opts?.playLocal === false) return { ok: false, source: 'none' };
     const ok = await playWav(wav);
     return { ok, source: 'system', path: wav };
   }
@@ -71,7 +100,7 @@ export async function speakTipo(
   const text = phraseFor(tipo);
   const local = recordedVoicePath(paths.vocesDir, text);
   if (fs.existsSync(local) && fs.statSync(local).size >= 1000) {
-    const ok = await playMp3(local, settings.volume);
+    const ok = await emitMp3(local, settings.volume, opts);
     if (ok) return { ok, source: 'local', path: local };
   }
 
@@ -85,7 +114,7 @@ export async function speakTipo(
     source = remote ? 'elevenlabs' : 'none';
   }
   if (remote) {
-    const ok = await playMp3(remote, settings.volume);
+    const ok = await emitMp3(remote, settings.volume, opts);
     if (ok) {
       return {
         ok,
@@ -96,6 +125,7 @@ export async function speakTipo(
   }
 
   // Legacy: si voz falla → Tocar-Wav
+  if (opts?.playLocal === false) return { ok: false, source: 'none' };
   const ok = await playWav(wav);
   return { ok, source: 'system', path: wav };
 }

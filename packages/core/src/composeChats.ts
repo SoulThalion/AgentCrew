@@ -211,14 +211,34 @@ export function composeChats(
     }
   }
 
-  // Renombre 1:1 (legacy)
+  // Renombre 1:1: activo huérfano ↔ UI sin match.
+  // Ignorar huérfanos inactivos (sticky de chats ya cerrados) — si no, el
+  // bind nunca dispara y el chat real sale como orphan Terminado + tab «sin frase».
   const huerfanos = rawAgents.filter((a) => {
     if (used.has(a.id)) return false;
     const tit = normalizeTitle(readTitulo(stateDir, a.id));
     if (tit && clavesUi.has(tit)) return false;
     return true;
   });
-  if (unmatchedIdx.length === 1 && huerfanos.length === 1) {
+  const activeHuerfanos = huerfanos.filter((a) => ACTIVE.has(String(a.state)));
+  if (activeHuerfanos.length === 1) {
+    const h = activeHuerfanos[0]!;
+    const focusedUnmatched = unmatchedIdx.filter((i) =>
+      focusedNorm.has(normalizeTitle(uiTitles[i]!)),
+    );
+    const bindIdx =
+      focusedUnmatched.length === 1
+        ? focusedUnmatched[0]!
+        : unmatchedIdx.length === 1
+          ? unmatchedIdx[0]!
+          : undefined;
+    if (bindIdx !== undefined) {
+      used.add(h.id);
+      assigned.set(bindIdx, h);
+      unmatchedIdx.splice(unmatchedIdx.indexOf(bindIdx), 1);
+      consumeInactiveSiblings(normalizeTitle(uiTitles[bindIdx]!));
+    }
+  } else if (unmatchedIdx.length === 1 && huerfanos.length === 1) {
     const i = unmatchedIdx[0]!;
     const h = huerfanos[0]!;
     used.add(h.id);

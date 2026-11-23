@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+type CastDeviceOpt = { name: string; host: string; port: number };
+
 type SettingsView = {
   provider: 'none' | 'fish' | 'elevenlabs';
   muted: boolean;
@@ -10,6 +12,12 @@ type SettingsView = {
   elevenApiKey: string;
   elevenVoiceId: string;
   elevenModel: string;
+  castEnabled: boolean;
+  castPlayLocal: boolean;
+  castDeviceName: string;
+  castDeviceHost: string;
+  castHttpPort: number;
+  castAnnounceIp: string;
   hasFishKey?: boolean;
   hasElevenKey?: boolean;
 };
@@ -24,6 +32,12 @@ const empty: SettingsView = {
   elevenApiKey: '',
   elevenVoiceId: '',
   elevenModel: 'eleven_multilingual_v2',
+  castEnabled: false,
+  castPlayLocal: true,
+  castDeviceName: '',
+  castDeviceHost: '',
+  castHttpPort: 18741,
+  castAnnounceIp: '',
 };
 
 type DisplayOpt = { id: number; label: string; primary: boolean };
@@ -35,6 +49,7 @@ export function Settings() {
   const [displayId, setDisplayId] = useState<number | null>(null);
   const [primaryId, setPrimaryId] = useState<number | null>(null);
   const [ready, setReady] = useState(false);
+  const [castDevices, setCastDevices] = useState<CastDeviceOpt[]>([]);
   const sRef = useRef(s);
   const readyRef = useRef(false);
   const lastSavedRef = useRef('');
@@ -136,6 +151,37 @@ export function Settings() {
       source: string;
     };
     setStatus(r.ok ? `OK (${r.source})` : `Falló (${r.source})`);
+  }
+
+  async function discoverCast() {
+    setStatus('Buscando Cast…');
+    const r = await window.agentcrew.discoverCast();
+    setCastDevices(r.devices || []);
+    if (!r.ok) {
+      setStatus(r.error || 'Discover falló');
+      return;
+    }
+    setStatus(r.devices.length ? `${r.devices.length} dispositivo(s)` : 'Ninguno en la red');
+  }
+
+  async function testCast() {
+    setStatus('Cast: reproduciendo MP3 AgentCrew…');
+    await save(true);
+    const r = await window.agentcrew.testCast();
+    if (r.ok && r.device) {
+      setStatus(`Cast OK → ${r.device.name} (${r.device.host})`);
+    } else {
+      setStatus(r.error || 'Cast falló');
+    }
+  }
+
+  function selectCastDevice(host: string) {
+    const d = castDevices.find((x) => x.host === host);
+    if (!d) {
+      setS({ ...s, castDeviceHost: host });
+      return;
+    }
+    setS({ ...s, castDeviceHost: d.host, castDeviceName: d.name });
   }
 
   return (
@@ -278,6 +324,80 @@ export function Settings() {
             />
           </div>
         ) : null}
+
+        <div className="mb-3 space-y-2 rounded border border-zinc-700 p-3">
+          <div className="text-xs font-medium text-zinc-300">Cast / Google Home</div>
+          <p className="text-[11px] leading-snug text-zinc-500">
+            Mismo MP3 AgentCrew (no voz Google). Misma Wi‑Fi. Firewall puede bloquear el
+            puerto {s.castHttpPort}.
+          </p>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={s.castEnabled}
+              onChange={(e) => setS({ ...s, castEnabled: e.target.checked })}
+            />
+            Enviar avisos al altavoz Cast
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={s.castPlayLocal}
+              disabled={!s.castEnabled}
+              onChange={(e) => setS({ ...s, castPlayLocal: e.target.checked })}
+            />
+            También reproducir en este PC
+          </label>
+          <label className="block">
+            <span className="text-zinc-400">Dispositivo</span>
+            <select
+              className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 p-2 disabled:opacity-50"
+              disabled={!s.castEnabled}
+              value={s.castDeviceHost}
+              onChange={(e) => selectCastDevice(e.target.value)}
+            >
+              <option value="">— elegir tras buscar —</option>
+              {s.castDeviceHost &&
+              !castDevices.some((d) => d.host === s.castDeviceHost) ? (
+                <option value={s.castDeviceHost}>
+                  {s.castDeviceName || s.castDeviceHost} ({s.castDeviceHost})
+                </option>
+              ) : null}
+              {castDevices.map((d) => (
+                <option key={d.host} value={d.host}>
+                  {d.name} ({d.host})
+                </option>
+              ))}
+            </select>
+          </label>
+          <input
+            className="w-full rounded border border-zinc-700 bg-zinc-800 p-2 disabled:opacity-50"
+            placeholder="IP manual (opcional)"
+            disabled={!s.castEnabled}
+            value={s.castDeviceHost}
+            onChange={(e) =>
+              setS({ ...s, castDeviceHost: e.target.value.trim() })
+            }
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded bg-zinc-700 px-3 py-2 text-sm hover:bg-zinc-600 disabled:opacity-50"
+              disabled={!s.castEnabled}
+              onClick={() => void discoverCast()}
+            >
+              Buscar
+            </button>
+            <button
+              type="button"
+              className="rounded bg-zinc-700 px-3 py-2 text-sm hover:bg-zinc-600 disabled:opacity-50"
+              disabled={!s.castEnabled || !s.castDeviceHost}
+              onClick={() => void testCast()}
+            >
+              Probar Cast
+            </button>
+          </div>
+        </div>
 
         {status ? <p className="mb-2 text-xs text-zinc-400">{status}</p> : null}
       </div>

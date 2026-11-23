@@ -26,6 +26,17 @@ interface AgentCrewApi {
   getSettings: () => Promise<unknown>;
   saveSettings: (patch: unknown) => Promise<unknown>;
   testVoice: (text?: string) => Promise<unknown>;
+  discoverCast: () => Promise<{
+    ok: boolean;
+    devices: Array<{ name: string; host: string; port: number }>;
+    error?: string;
+  }>;
+  testCast: () => Promise<{
+    ok: boolean;
+    device?: { name: string; host: string; port: number };
+    url?: string;
+    error?: string;
+  }>;
   openSettings: () => Promise<boolean>;
   openFishPortal: () => Promise<{ ok: boolean; url: string }>;
   listDisplays: () => Promise<{

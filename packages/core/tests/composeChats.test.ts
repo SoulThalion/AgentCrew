@@ -7,6 +7,7 @@ import {
   writeEstado,
   writeTitulo,
   writePrompt,
+  writeFrase,
   markVisto,
   clearRun,
 } from '../src/index.js';
@@ -24,6 +25,7 @@ describe('composeChats', () => {
 
   it('una fila por chat UI; sin estado → detenido', () => {
     writeEstado(dir, 'a1', 'trabajando');
+    writePrompt(dir, 'a1', 'Chat activo');
     writeTitulo(dir, 'a1', 'Chat activo');
     const list = composeChats(dir, {
       uiTitles: ['Chat activo', 'Otro idle'],
@@ -62,6 +64,7 @@ describe('composeChats', () => {
     writeEstado(dir, 'old', 'terminado');
     writeTitulo(dir, 'old', 'Mismo');
     writeEstado(dir, 'neu', 'trabajando');
+    writePrompt(dir, 'neu', 'Mismo');
     writeTitulo(dir, 'neu', 'Mismo');
     const list = composeChats(dir, {
       uiTitles: ['Mismo'],
@@ -117,6 +120,30 @@ describe('composeChats', () => {
       focusedTitles: ['Solo UI'],
     });
     expect(list[0]?.state).toBe('atento');
+  });
+
+  it('activo sin sticky + huérfanos viejos → bind al UI libre (no orphan doble)', () => {
+    writeEstado(dir, 'vivo', 'leyendo');
+    writePrompt(dir, 'vivo', 'Ha aparecido otro sprite Terminado');
+    writeFrase(dir, 'vivo', 'ultima frase del asistente');
+    // sin titulo sticky
+    writeEstado(dir, 'viejo', 'terminado');
+    writeTitulo(dir, 'viejo', 'Project technology stack advice'); // cerrado, no en UI
+    writePrompt(dir, 'viejo', 'otra cosa');
+    writeEstado(dir, 'otro', 'terminado');
+    writeTitulo(dir, 'otro', 'MiraiWay phase 4');
+    writePrompt(dir, 'otro', 'MiraiWay phase 4');
+    const list = composeChats(dir, {
+      uiTitles: ['Sidebar footer sync', 'MiraiWay phase 4'],
+      focusedTitles: ['Sidebar footer sync'],
+    });
+    const tab = list.find((a) => a.title === 'Sidebar footer sync');
+    expect(tab?.id).toBe('vivo');
+    expect(tab?.phrase).toBe('ultima frase del asistente');
+    expect(list.filter((a) => a.id === 'vivo')).toHaveLength(1);
+    expect(list.some((a) => a.id === 'vivo' && a.title.startsWith('Ha aparecido'))).toBe(
+      false,
+    );
   });
 
   it('fuzzy prompt↔UI asigna activo; sticky malo no pinta tab idle', () => {

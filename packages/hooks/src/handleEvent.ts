@@ -12,6 +12,7 @@ import {
   ensureStateDir,
   fileAprobacion,
   fileUltima,
+  hasPrompt,
   hasRun,
   markAprobacion,
   markAprobacionSaid,
@@ -76,11 +77,17 @@ function afterToolWorkingState(stateDir: string, id: string): AgentState {
   return 'trabajando';
 }
 
+/** Chat real = prompt usuario o run activo. Task/QA subagentes → no. */
+function isTrackedChat(stateDir: string, id: string): boolean {
+  return Boolean(id) && (hasPrompt(stateDir, id) || hasRun(stateDir, id));
+}
+
 function clearOneSub(stateDir: string, id: string, toolId: string): void {
   if (toolId) {
     removeFile(path.join(stateDir, `${prefixSubagentes(id)}${safeId(toolId)}.txt`));
   }
   if (countSubagentes(stateDir, id) > 0) return;
+  if (!isTrackedChat(stateDir, id)) return;
   const cur = readEstado(stateDir, id);
   if (cur?.state !== 'subagentes') return;
   writeEstado(stateDir, id, afterToolWorkingState(stateDir, id));
@@ -151,7 +158,7 @@ export function handleEvent(
 
       case 'switch': {
         const dest = modeFromRaw(raw);
-        if (dest && id) {
+        if (dest && id && isTrackedChat(stateDir, id)) {
           writeModo(stateDir, id, dest);
           if (dest === 'plan') clearRun(stateDir, id);
           if (dest === 'agent') markRun(stateDir, id);
@@ -161,7 +168,7 @@ export function handleEvent(
       }
 
       case 'espera': {
-        if (id) {
+        if (id && isTrackedChat(stateDir, id)) {
           // AskQuestion: marca pregunta para que stop no emita «fin» después.
           writeUltima(stateDir, id, 'pregunta');
           writeEstado(stateDir, id, 'esperando');
@@ -172,7 +179,7 @@ export function handleEvent(
 
       case 'aprobacion': {
         // preToolUse Shell: solo smart-approval (retry tras Auto-review).
-        if (id) {
+        if (id && isTrackedChat(stateDir, id)) {
           markShell(stateDir, id);
           if (asksSmartApproval(raw)) {
             markAprobacion(stateDir, id);
@@ -185,22 +192,20 @@ export function handleEvent(
       }
 
       case 'shell-antes': {
-        // beforeShellExecution: posible card Pending approval.
-        // Sonar lo confirma el panel tras grace si el flag sigue (auto-run limpia antes).
-        if (id) {
+        // beforeShellExecution dispara en auto-run Y en Pending approval.
+        // No hay señal fiable de card real aquí: afterShellExecution solo al
+        // terminar el comando → grace 1.5s sonaba en comandos largos auto-run.
+        // Voz/esperando solo vía preToolUse smart (aprobacion).
+        if (id && isTrackedChat(stateDir, id)) {
           markShell(stateDir, id);
-          markAprobacion(stateDir, id);
-          writeEstado(stateDir, id, 'esperando');
         }
         return allow();
       }
 
       case 'shell-despues': {
-        // afterShellExecution: comando ya corrió → no era espera larga.
-        if (!id) return empty();
+        if (!id || !isTrackedChat(stateDir, id)) return empty();
         clearShell(stateDir, id);
-        const eraAprob = fs.existsSync(fileAprobacion(stateDir, id));
-        if (eraAprob) {
+        if (fs.existsSync(fileAprobacion(stateDir, id))) {
           clearAprobacion(stateDir, id);
           writeEstado(stateDir, id, afterToolWorkingState(stateDir, id));
         }
@@ -209,7 +214,7 @@ export function handleEvent(
 
       case 'tool-fail': {
         // postToolUseFailure (reject / deny / error): soltar espera de shell.
-        if (!id) return empty();
+        if (!id || !isTrackedChat(stateDir, id)) return empty();
         const tool = field(raw, 'tool_name');
         if (tool === 'Shell' || !tool) {
           clearShell(stateDir, id);
@@ -222,7 +227,7 @@ export function handleEvent(
       }
 
       case 'busqueda': {
-        if (id) {
+        if (id && isTrackedChat(stateDir, id)) {
           markBusqueda(stateDir, id);
           writeEstado(stateDir, id, 'esperando');
           writeSonar(stateDir, id, 'busqueda');
@@ -231,17 +236,21 @@ export function handleEvent(
       }
 
       case 'subagentes': {
-        if (id) markSubagente(stateDir, id, field(raw, 'tool_use_id'));
+        if (id && isTrackedChat(stateDir, id)) {
+          markSubagente(stateDir, id, field(raw, 'tool_use_id'));
+        }
         return allow();
       }
 
       case 'subagentes-fin': {
-        if (id) clearOneSub(stateDir, id, field(raw, 'tool_use_id'));
+        if (id && isTrackedChat(stateDir, id)) {
+          clearOneSub(stateDir, id, field(raw, 'tool_use_id'));
+        }
         return empty();
       }
 
       case 'espera-fin': {
-        if (!id) return empty();
+        if (!id || !isTrackedChat(stateDir, id)) return empty();
         const tool = field(raw, 'tool_name');
         if (tool === 'Shell') clearShell(stateDir, id);
         if (tool === 'WebSearch') clearBusqueda(stateDir, id);
@@ -253,7 +262,8 @@ export function handleEvent(
       }
 
       case 'pensamiento': {
-        if (id) {
+        // Solo chats reales (prompt/run). Subagentes Task sin prompt → fantasmas.
+        if (id && isTrackedChat(stateDir, id)) {
           const cur = readEstado(stateDir, id);
           if (cur?.state === 'trabajando') writeEstado(stateDir, id, 'planificando');
         }
@@ -261,7 +271,7 @@ export function handleEvent(
       }
 
       case 'leyendo': {
-        if (id) {
+        if (id && isTrackedChat(stateDir, id)) {
           const cur = readEstado(stateDir, id);
           const enCurso = hasRun(stateDir, id);
           if (
@@ -276,7 +286,7 @@ export function handleEvent(
       }
 
       case 'herramienta-fin': {
-        if (!id) return empty();
+        if (!id || !isTrackedChat(stateDir, id)) return empty();
         const cur = readEstado(stateDir, id);
         let valor = cur?.state ?? '';
         if (!valor && hasRun(stateDir, id)) valor = 'leyendo';
@@ -289,7 +299,7 @@ export function handleEvent(
       }
 
       case 'respuesta': {
-        if (!id) return empty();
+        if (!id || !isTrackedChat(stateDir, id)) return empty();
         const texto = field(raw, 'text');
         const marca = looksLikeQuestion(texto) ? 'pregunta' : 'cierre';
         writeUltima(stateDir, id, marca);
@@ -304,7 +314,8 @@ export function handleEvent(
       }
 
       case 'stop': {
-        if (!id) return empty();
+        // Subagente Task a veces emite stop con id propio sin prompt → no inventar slot.
+        if (!id || !isTrackedChat(stateDir, id)) return empty();
         const status = field(raw, 'status').trim().toLowerCase();
         clearRun(stateDir, id);
         clearShell(stateDir, id);

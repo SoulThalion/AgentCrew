@@ -444,21 +444,34 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     cands.filter((c) => used.has(c.id) && c.tituloN).map((c) => c.tituloN),
   );
   let freeUi = uiTitles.filter((t) => !claimed.has(norm(t)));
-  if (freeUi.length === 1 && orphans.length === 1) {
-    assign(orphans[0]!.id, freeUi[0]!);
-  } else {
+  const ACTIVE_STATES = new Set([
+    'trabajando',
+    'planificando',
+    'leyendo',
+    'esperando',
+    'subagentes',
+  ]);
+  const activeOrphans = orphans.filter((c) => {
+    const ag = agents.find((x) => x.id === c.id);
+    return ag && ACTIVE_STATES.has(String(ag.state));
+  });
+  // 1 activo sin sticky + 1 UI libre (u 1 foco libre) → pegar sticky.
+  // No exigir orphans.length===1: chats cerrados sin titulo no deben bloquear.
+  if (activeOrphans.length === 1) {
+    const only = activeOrphans[0]!;
+    const focusedFree = focused.filter((t) => freeUi.some((u) => norm(u) === norm(t)));
+    const target =
+      focusedFree.length === 1
+        ? focusedFree[0]!
+        : freeUi.length === 1
+          ? freeUi[0]!
+          : null;
+    if (target && assign(only.id, target)) {
+      freeUi = freeUi.filter((t) => norm(t) !== norm(target));
+    }
+  }
+  if (freeUi.length > 0 && activeOrphans.some((c) => !used.has(c.id))) {
     // 1 activo huérfano + UI libre fuzzy → sticky ahí (nunca al primer fijado por orden)
-    const ACTIVE_STATES = new Set([
-      'trabajando',
-      'planificando',
-      'leyendo',
-      'esperando',
-      'subagentes',
-    ]);
-    const activeOrphans = orphans.filter((c) => {
-      const ag = agents.find((x) => x.id === c.id);
-      return ag && ACTIVE_STATES.has(String(ag.state));
-    });
     for (const c of activeOrphans) {
       if (!c.promptN || used.has(c.id)) continue;
       const hits = freeUi.filter((t) => fuzzyTitleMatch(c.promptN, t));

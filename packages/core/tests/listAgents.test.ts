@@ -30,6 +30,7 @@ describe('listAgents + stateStore', () => {
 
   it('escribe estado y lista ordenado por prioridad', () => {
     writeEstado(dir, 'chat-a', 'trabajando');
+    writePrompt(dir, 'chat-a', 'tarea a');
     writeTitulo(dir, 'chat-a', 'Alpha');
     writeFrase(dir, 'chat-a', 'voy');
     writeEstado(dir, 'chat-b', 'esperando');
@@ -54,6 +55,7 @@ describe('listAgents + stateStore', () => {
   });
 
   it('subagentes cuenta archivos sub-', () => {
+    writePrompt(dir, 'padre', 'tarea con QA');
     markSubagente(dir, 'padre', 't1');
     markSubagente(dir, 'padre', 't2');
     const list = listAgents(dir);
@@ -89,9 +91,17 @@ describe('listAgents + stateStore', () => {
 
   it('sin run + ultima cierre + trabajando → detenido', () => {
     writeEstado(dir, 'idle1', 'trabajando');
+    writePrompt(dir, 'idle1', 'ya cerró');
     writeUltima(dir, 'idle1', 'cierre');
     clearRun(dir, 'idle1');
     expect(listAgents(dir)[0]?.state).toBe('detenido');
+  });
+
+  it('planificando sin prompt ni run → fantasma, no lista', () => {
+    writeEstado(dir, 'ghost-qa', 'planificando');
+    writeTitulo(dir, 'ghost-qa', 'MiraiWay phase 4');
+    expect(listAgents(dir).map((a) => a.id)).not.toContain('ghost-qa');
+    expect(fs.existsSync(path.join(dir, 'estado-ghost-qa.txt'))).toBe(false);
   });
 
   it('estado activo stale no revive por run-*', () => {
