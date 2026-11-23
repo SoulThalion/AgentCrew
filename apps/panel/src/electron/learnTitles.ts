@@ -66,6 +66,8 @@ function isJunkTitle(t: string): boolean {
 }
 
 function scrapePs(): Promise<string[]> {
+  // Solo cobertura UIA. Dedup por título (case-insensitive) → 1 fila UI / título
+  // (evita sprites duplicados). No cambia matching learnTitles/compose.
   const ps = `
 $ErrorActionPreference = 'SilentlyContinue'
 Add-Type -ReferencedAssemblies @('UIAutomationClient','UIAutomationTypes','WindowsBase') -TypeDefinition @"
@@ -93,39 +95,75 @@ public static class ListAgentTitles {
     t = t.Trim();
     if (t.Length < 2 || t.Length > 120) return;
     if (string.Equals(t, "New Agent", StringComparison.OrdinalIgnoreCase)) return;
-    if (!seen.Add(t)) return;
+    if (!seen.Add(t)) {
+      // Mismo título otra vez: solo subir marca de foco (no segunda fila)
+      if (!sel) return;
+      for (int i = 0; i < lines.Count; i++) {
+        string bare = lines[i].StartsWith("*") ? lines[i].Substring(1) : lines[i];
+        if (string.Equals(bare, t, StringComparison.OrdinalIgnoreCase)) {
+          if (!lines[i].StartsWith("*")) lines[i] = "*" + bare;
+          break;
+        }
+      }
+      return;
+    }
     lines.Add((sel ? "*" : "") + t);
+  }
+  static void ScrapeRoot(AutomationElement root, HashSet<string> seen, List<string> lines) {
+    if (root == null) return;
+    try {
+      var tabCond = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.TabItem);
+      foreach (AutomationElement el in root.FindAll(TreeScope.Descendants, tabCond)) {
+        string nombre = "";
+        try { nombre = el.Current.Name ?? ""; } catch { continue; }
+        int marca = nombre.IndexOf(", Chat Editors", StringComparison.OrdinalIgnoreCase);
+        if (marca > 0) {
+          AddTitle(seen, lines, nombre.Substring(0, marca).Trim(), Selected(el));
+          continue;
+        }
+        // Variante sin coma / texto distinto pero con Chat Editors
+        marca = nombre.IndexOf("Chat Editors", StringComparison.OrdinalIgnoreCase);
+        if (marca > 0) {
+          string tit = nombre.Substring(0, marca).Trim().TrimEnd(',', ' ', '-', ':');
+          AddTitle(seen, lines, tit, Selected(el));
+        }
+      }
+      var btnCond = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button);
+      foreach (AutomationElement el in root.FindAll(TreeScope.Descendants, btnCond)) {
+        string nombre = "";
+        try { nombre = el.Current.Name ?? ""; } catch { continue; }
+        if (nombre.StartsWith("Open agent ", StringComparison.OrdinalIgnoreCase)) {
+          AddTitle(seen, lines, nombre.Substring("Open agent ".Length).Trim(), Selected(el));
+        }
+      }
+    } catch { }
   }
   public static string Go() {
     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     var lines = new List<string>();
+    var pids = new HashSet<int>();
+    foreach (var proc in Process.GetProcessesByName("Cursor")) {
+      try { pids.Add(proc.Id); } catch { }
+    }
+    if (pids.Count == 0) return "";
+    // Todas las ventanas top-level de procesos Cursor (no solo MainWindowHandle)
+    try {
+      var winCond = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window);
+      foreach (AutomationElement win in AutomationElement.RootElement.FindAll(TreeScope.Children, winCond)) {
+        int pid = 0;
+        try { pid = win.Current.ProcessId; } catch { continue; }
+        if (!pids.Contains(pid)) continue;
+        ScrapeRoot(win, seen, lines);
+      }
+    } catch { }
+    // Fallback MainWindowHandle por si Children no listó alguna
     foreach (var proc in Process.GetProcessesByName("Cursor")) {
       IntPtr h = IntPtr.Zero;
       try { h = proc.MainWindowHandle; } catch { continue; }
       if (h == IntPtr.Zero) continue;
       AutomationElement root = null;
       try { root = AutomationElement.FromHandle(h); } catch { continue; }
-      if (root == null) continue;
-      try {
-        var tabCond = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.TabItem);
-        foreach (AutomationElement el in root.FindAll(TreeScope.Descendants, tabCond)) {
-          string nombre = "";
-          try { nombre = el.Current.Name ?? ""; } catch { continue; }
-          int marca = nombre.IndexOf(", Chat Editors", StringComparison.OrdinalIgnoreCase);
-          if (marca > 0) {
-            AddTitle(seen, lines, nombre.Substring(0, marca).Trim(), Selected(el));
-            continue;
-          }
-        }
-        var btnCond = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button);
-        foreach (AutomationElement el in root.FindAll(TreeScope.Descendants, btnCond)) {
-          string nombre = "";
-          try { nombre = el.Current.Name ?? ""; } catch { continue; }
-          if (nombre.StartsWith("Open agent ", StringComparison.OrdinalIgnoreCase)) {
-            AddTitle(seen, lines, nombre.Substring("Open agent ".Length).Trim(), Selected(el));
-          }
-        }
-      } catch { }
+      ScrapeRoot(root, seen, lines);
     }
     return string.Join("|", lines);
   }
@@ -137,7 +175,7 @@ public static class ListAgentTitles {
     execFile(
       'powershell.exe',
       ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
-      { windowsHide: true, encoding: 'utf8', timeout: 7000, maxBuffer: 2 * 1024 * 1024 },
+      { windowsHide: true, encoding: 'utf8', timeout: 12000, maxBuffer: 2 * 1024 * 1024 },
       (err, stdout) => {
         if (err || !stdout) {
           resolve([]);
