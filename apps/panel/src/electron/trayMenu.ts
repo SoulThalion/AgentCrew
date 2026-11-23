@@ -16,6 +16,8 @@ type Hooks = {
   openSettings: () => void;
   testVoice: (tipo: string) => void;
   onPrefs: (p: PanelStatePrefs) => void;
+  /** Salir definitivo (marca latch para que el watcher no relance). */
+  quitPanel: () => void;
 };
 
 let tray: Tray | null = null;
@@ -178,7 +180,7 @@ function rebuild(hooks: Hooks): void {
     { type: 'separator' },
     { label: 'Ajustes TTS…', click: () => hooks.openSettings() },
     { type: 'separator' },
-    { label: 'Salir', click: () => app.quit() },
+    { label: 'Salir', click: () => hooks.quitPanel() },
   ]);
   tray.setContextMenu(menu);
   tray.setToolTip('AgentCrew — panel de agentes');

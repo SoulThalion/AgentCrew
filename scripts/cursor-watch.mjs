@@ -2,6 +2,8 @@
 /**
  * Watcher AgentCrew ↔ Cursor IDE.
  * - Si Cursor corre y el panel no → arranca panel.
+ * - Si el usuario cerró el panel (panel-user-closed.txt) → no relanza
+ *   hasta que Cursor desaparezca y vuelva (edge up).
  * - El panel se auto-cierra cuando Cursor desaparece (grace).
  * Instalación: scripts/install-cursor-watch.mjs → Startup de Windows.
  */
@@ -22,6 +24,7 @@ const stateDir =
 const launchPath = path.join(hooksDir, 'panel-launch.json');
 const offPath = path.join(stateDir, 'watch-off.txt');
 const panelPidPath = path.join(stateDir, 'panel.pid');
+const userClosedPath = path.join(stateDir, 'panel-user-closed.txt');
 const watchPidPath = path.join(stateDir, 'cursor-watch.pid');
 const logPath = path.join(stateDir, 'cursor-watch.log');
 
@@ -29,6 +32,8 @@ const POLL_MS = 2000;
 const START_COOLDOWN_MS = 15_000;
 
 let lastStart = 0;
+/** Último tick: ¿Cursor vivo? Para detectar edge down→up. */
+let cursorWas = null;
 
 function claimWatchLock() {
   try {
@@ -74,6 +79,21 @@ function disabled() {
   return fs.existsSync(offPath);
 }
 
+function userClosed() {
+  return fs.existsSync(userClosedPath);
+}
+
+function clearUserClosed() {
+  try {
+    if (fs.existsSync(userClosedPath)) {
+      fs.unlinkSync(userClosedPath);
+      log('cleared panel-user-closed (Cursor edge up)');
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function pidAlive(pid) {
   if (!pid || !Number.isFinite(pid) || pid <= 0) return false;
   try {
@@ -90,6 +110,16 @@ function readPanelPid() {
     return Number.isFinite(n) ? n : 0;
   } catch {
     return 0;
+  }
+}
+
+function writePanelPidHint(pid) {
+  if (!pid) return;
+  try {
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(panelPidPath, String(pid), 'utf8');
+  } catch {
+    /* ignore */
   }
 }
 
@@ -162,6 +192,8 @@ function startPanel() {
       windowsHide: true,
       env: { ...process.env },
     });
+    // Hint inmediato: evita spam cada 15s si el panel no escribe panel.pid
+    if (child.pid) writePanelPidHint(child.pid);
     child.unref();
     log(`start panel pid=${child.pid} cmd=${launch.command}`);
   } catch (e) {
@@ -172,7 +204,21 @@ function startPanel() {
 async function tick() {
   if (disabled()) return;
   const cursor = await cursorRunning();
-  if (cursor && !panelRunning()) startPanel();
+
+  // Edge Cursor off→on: usuario cerró panel; ahora IDE vuelve → permitir auto-start
+  if (cursorWas === false && cursor === true) {
+    clearUserClosed();
+  }
+  if (cursorWas === null) {
+    // Primer tick: no limpiar latch (respeta cierre previo si Cursor ya estaba)
+    cursorWas = cursor;
+  } else {
+    cursorWas = cursor;
+  }
+
+  if (!cursor) return;
+  if (userClosed()) return;
+  if (!panelRunning()) startPanel();
 }
 
 claimWatchLock();

@@ -156,6 +156,10 @@ function trayHooks() {
         mainWindow.webContents.send('prefs:update', p);
       }
     },
+    quitPanel: () => {
+      markUserClosedPanel();
+      app.quit();
+    },
   };
 }
 
@@ -354,8 +358,20 @@ function writePanelPid(): void {
 }
 
 function clearPanelPid(): void {
+  // Solo borrar si el PID es el nuestro (2ª instancia no debe tocar el archivo)
   try {
-    fs.unlinkSync(panelPidPath());
+    const cur = Number.parseInt(fs.readFileSync(panelPidPath(), 'utf8').trim(), 10);
+    if (cur === process.pid) fs.unlinkSync(panelPidPath());
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Usuario cerró a propósito → watcher no relanza hasta que Cursor se apague y vuelva. */
+function markUserClosedPanel(): void {
+  try {
+    fs.mkdirSync(stateDir(), { recursive: true });
+    fs.writeFileSync(path.join(stateDir(), 'panel-user-closed.txt'), '1', 'utf8');
   } catch {
     /* ignore */
   }
@@ -765,6 +781,7 @@ function registerIpc(): void {
     return true;
   });
   ipcMain.handle('panel:quit', () => {
+    markUserClosedPanel();
     app.quit();
     return true;
   });

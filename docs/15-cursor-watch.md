@@ -10,8 +10,11 @@ Cursor **no** expone hook “IDE abierto”. Para abrir/cerrar el sidebar con el
 | Aparece `Cursor.exe` | Watcher arranca el panel si no corre |
 | Desaparece Cursor (~10 s) | El **panel** hace `app.quit()` |
 | Vuelve a abrir Cursor | Watcher vuelve a arrancar el panel |
+| Usuario **Salir** (bandeja / quit) | `panel-user-closed.txt` → watcher **no** relanza hasta que Cursor se apague y vuelva |
 
 El watcher **sigue vivo** sin Cursor (espera el próximo arranque del IDE).
+
+Nota: cerrar la ventana de Cursor no siempre mata `Cursor.exe` (procesos en background). El watcher mira el proceso, no la UI.
 
 ## Archivos
 
@@ -21,6 +24,7 @@ El watcher **sigue vivo** sin Cursor (espera el próximo arranque del IDE).
 | `~/.cursor/hooks/panel-launch.json` | Cómo lanzar Electron / `AgentCrew.exe` |
 | `~/…/Startup/AgentCrew-CursorWatch.vbs` | Autostart Windows |
 | `state/panel.pid` | PID del panel (¿ya corre?) |
+| `state/panel-user-closed.txt` | Latch tras Salir manual; se borra en edge Cursor up |
 | `state/cursor-watch.pid` | PID del watcher (una sola instancia) |
 | `state/cerrar.txt` | Señal opcional → panel sale |
 | `state/watch-off.txt` | Desactiva follow (no auto-start / no auto-quit) |
