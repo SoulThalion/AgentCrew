@@ -10,13 +10,32 @@ Franja desktop para ver agentes [Cursor](https://cursor.com): hooks → estado �
 
 ## Instalación rápida (Windows)
 
+**Sin clonar** (PowerShell; requiere [Node 20+](https://nodejs.org)):
+
+```powershell
+irm https://raw.githubusercontent.com/SoulThalion/AgentCrew/main/installer/bootstrap.ps1 | iex
+```
+
+Instala en `%LOCALAPPDATA%\AgentCrew` (build + hooks + watcher). Con flags:
+
+```powershell
+$b = "$env:TEMP\agentcrew-boot.ps1"
+irm https://raw.githubusercontent.com/SoulThalion/AgentCrew/main/installer/bootstrap.ps1 -OutFile $b
+& $b -Panel          # arranca panel al terminar
+& $b -Ref v0.1.0     # tag concreto
+```
+
+**Con git:**
+
 ```bash
-git clone <url-del-repo>
+git clone https://github.com/SoulThalion/AgentCrew.git
 cd AgentCrew
 npm run install:all
 # Abre Cursor: el watcher levanta el panel solo.
 # (opcional) npm run panel:start
 ```
+
+Solo el `.exe` del panel (sin hooks): `npm run panel:dist` → `apps/panel/release/`, o Releases en GitHub cuando publiquemos.
 
 O paso a paso:
 
