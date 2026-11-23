@@ -485,10 +485,45 @@ function confirmPendingErrors(): void {
   }
 }
 
+/**
+ * beforeShellExecution marca aprobación; auto-run limpia en afterShellExecution.
+ * Si el flag aguanta ~1.5 s → card Pending approval real → sonar una vez.
+ */
+function confirmPendingApprovals(): void {
+  const dir = stateDir();
+  if (!fs.existsSync(dir)) return;
+  const now = Date.now();
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.startsWith('aprobacion-') || !name.endsWith('.txt')) continue;
+    if (name.startsWith('aprobacion-said-')) continue;
+    const id = name.slice('aprobacion-'.length, -'.txt'.length);
+    if (!id) continue;
+    const full = path.join(dir, name);
+    const said = path.join(dir, `aprobacion-said-${id}.txt`);
+    if (fs.existsSync(said)) continue;
+    let at = 0;
+    try {
+      const raw = fs.readFileSync(full, 'utf8').trim();
+      at = Number.parseInt(raw, 10);
+      if (!Number.isFinite(at)) at = fs.statSync(full).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (now - at < 1_500) continue;
+    try {
+      fs.writeFileSync(said, String(now), 'utf8');
+      fs.writeFileSync(path.join(dir, `sonar-${id}.txt`), 'aprobacion', 'utf8');
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 function consumeSonar(): void {
   const dir = stateDir();
   if (!fs.existsSync(dir)) return;
   confirmPendingErrors();
+  confirmPendingApprovals();
   syncTtsFromState();
   const tipos: string[] = [];
   for (const name of fs.readdirSync(dir)) {

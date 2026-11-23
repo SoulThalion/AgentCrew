@@ -14,6 +14,7 @@ import {
   fileUltima,
   hasRun,
   markAprobacion,
+  markAprobacionSaid,
   markBusqueda,
   markErrorPending,
   markRun,
@@ -101,6 +102,7 @@ function clearSessionFiles(stateDir: string, id: string): void {
   for (const p of prefixes) {
     removeFile(path.join(stateDir, `${p}${sid}.txt`));
   }
+  clearAprobacion(stateDir, id);
   clearRun(stateDir, id);
   clearShell(stateDir, id);
   clearSubagentes(stateDir, id);
@@ -169,20 +171,61 @@ export function handleEvent(
       }
 
       case 'aprobacion': {
+        // preToolUse Shell: solo smart-approval (retry tras Auto-review).
         if (id) {
           markShell(stateDir, id);
           if (asksSmartApproval(raw)) {
             markAprobacion(stateDir, id);
+            markAprobacionSaid(stateDir, id);
             writeEstado(stateDir, id, 'esperando');
+            writeSonar(stateDir, id, 'aprobacion');
           }
         }
         return allow();
+      }
+
+      case 'shell-antes': {
+        // beforeShellExecution: posible card Pending approval.
+        // Sonar lo confirma el panel tras grace si el flag sigue (auto-run limpia antes).
+        if (id) {
+          markShell(stateDir, id);
+          markAprobacion(stateDir, id);
+          writeEstado(stateDir, id, 'esperando');
+        }
+        return allow();
+      }
+
+      case 'shell-despues': {
+        // afterShellExecution: comando ya corrió → no era espera larga.
+        if (!id) return empty();
+        clearShell(stateDir, id);
+        const eraAprob = fs.existsSync(fileAprobacion(stateDir, id));
+        if (eraAprob) {
+          clearAprobacion(stateDir, id);
+          writeEstado(stateDir, id, afterToolWorkingState(stateDir, id));
+        }
+        return empty();
+      }
+
+      case 'tool-fail': {
+        // postToolUseFailure (reject / deny / error): soltar espera de shell.
+        if (!id) return empty();
+        const tool = field(raw, 'tool_name');
+        if (tool === 'Shell' || !tool) {
+          clearShell(stateDir, id);
+          if (fs.existsSync(fileAprobacion(stateDir, id))) {
+            clearAprobacion(stateDir, id);
+            writeEstado(stateDir, id, afterToolWorkingState(stateDir, id));
+          }
+        }
+        return empty();
       }
 
       case 'busqueda': {
         if (id) {
           markBusqueda(stateDir, id);
           writeEstado(stateDir, id, 'esperando');
+          writeSonar(stateDir, id, 'busqueda');
         }
         return allow();
       }
@@ -267,6 +310,7 @@ export function handleEvent(
         clearShell(stateDir, id);
         clearSubagentes(stateDir, id);
         clearBusqueda(stateDir, id);
+        clearAprobacion(stateDir, id);
         let tipoSonar = '';
         if (status === 'completed' || status === 'success') {
           clearErrorPending(stateDir, id);
@@ -313,9 +357,15 @@ export function handleEvent(
     }
     if (evento === 'prompt') return cont();
     if (
-      ['switch', 'aprobacion', 'busqueda', 'espera', 'subagentes', 'leyendo'].includes(
-        evento,
-      )
+      [
+        'switch',
+        'aprobacion',
+        'shell-antes',
+        'busqueda',
+        'espera',
+        'subagentes',
+        'leyendo',
+      ].includes(evento)
     ) {
       return allow();
     }

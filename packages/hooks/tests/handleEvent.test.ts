@@ -180,4 +180,111 @@ describe('handleEvent', () => {
       true,
     );
   });
+
+  it('shell-antes → esperando + flag (sin sonar inmediato)', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'sh1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    const r = handleEvent(
+      'shell-antes',
+      JSON.stringify({ conversation_id: 'sh1', command: 'npm test' }),
+      dir,
+    );
+    expect(r.stdout).toBe('{"permission":"allow"}');
+    expect(fs.readFileSync(path.join(dir, 'estado-sh1.txt'), 'utf8').startsWith('esperando|')).toBe(
+      true,
+    );
+    expect(fs.existsSync(path.join(dir, 'aprobacion-sh1.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'sonar-sh1.txt'))).toBe(false);
+  });
+
+  it('shell-despues (auto-run) limpia → trabajando sin sonar', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'sh2', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'shell-antes',
+      JSON.stringify({ conversation_id: 'sh2', command: 'ls' }),
+      dir,
+    );
+    handleEvent(
+      'shell-despues',
+      JSON.stringify({ conversation_id: 'sh2', command: 'ls', output: 'ok' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'aprobacion-sh2.txt'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'sonar-sh2.txt'))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, 'estado-sh2.txt'), 'utf8').startsWith('trabajando|')).toBe(
+      true,
+    );
+  });
+
+  it('tool-fail Shell limpia aprobación pendiente', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'sh3', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'shell-antes',
+      JSON.stringify({ conversation_id: 'sh3', command: 'rm -rf /' }),
+      dir,
+    );
+    handleEvent(
+      'tool-fail',
+      JSON.stringify({
+        conversation_id: 'sh3',
+        tool_name: 'Shell',
+        failure_type: 'permission_denied',
+      }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'aprobacion-sh3.txt'))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, 'estado-sh3.txt'), 'utf8').startsWith('trabajando|')).toBe(
+      true,
+    );
+  });
+
+  it('aprobacion smart → esperando + sonar + said (no doble grace)', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'sm1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'aprobacion',
+      JSON.stringify({
+        conversation_id: 'sm1',
+        tool_name: 'Shell',
+        request_smart_mode_approval: true,
+      }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'estado-sm1.txt'), 'utf8').startsWith('esperando|')).toBe(
+      true,
+    );
+    expect(fs.readFileSync(path.join(dir, 'sonar-sm1.txt'), 'utf8').trim()).toBe('aprobacion');
+    expect(fs.existsSync(path.join(dir, 'aprobacion-said-sm1.txt'))).toBe(true);
+  });
+
+  it('aprobacion Shell sin smart → no cambia a esperando', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'sm2', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'aprobacion',
+      JSON.stringify({ conversation_id: 'sm2', tool_name: 'Shell' }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'estado-sm2.txt'), 'utf8').startsWith('trabajando|')).toBe(
+      true,
+    );
+    expect(fs.existsSync(path.join(dir, 'sonar-sm2.txt'))).toBe(false);
+  });
 });

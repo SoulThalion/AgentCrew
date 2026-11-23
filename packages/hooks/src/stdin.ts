@@ -32,9 +32,12 @@ export function conversationId(raw: string): string {
 }
 
 export function asksSmartApproval(raw: string): boolean {
+  if (!raw) return false;
   return (
     /request_smart_mode_approval"\s*:\s*true/.test(raw) ||
-    /requestSmartModeApproval"\s*:\s*true/.test(raw)
+    /requestSmartModeApproval"\s*:\s*true/.test(raw) ||
+    /"smart_mode_block_reason"\s*:/.test(raw) ||
+    /"smartModeBlockReason"\s*:/.test(raw)
   );
 }
 

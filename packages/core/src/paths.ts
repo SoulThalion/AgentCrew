@@ -41,6 +41,10 @@ export function fileAprobacion(stateDir: string, id: string): string {
   return path.join(stateDir, `aprobacion-${safeId(id)}.txt`);
 }
 
+export function fileAprobacionSaid(stateDir: string, id: string): string {
+  return path.join(stateDir, `aprobacion-said-${safeId(id)}.txt`);
+}
+
 export function fileBusqueda(stateDir: string, id: string): string {
   return path.join(stateDir, `busqueda-${safeId(id)}.txt`);
 }

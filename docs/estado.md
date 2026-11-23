@@ -54,6 +54,7 @@
 - [x] Issue #2: sticky unico + compose no cruza hermanos (prompt→otro tab)
 - [x] Issue #3: error-pending 6s (no falso sonar) + compose fuzzy / sin fill tab idle
 - [x] Sonar: stop+pregunta no duplica fin (ultima=pregunta → esperando, sin fin)
+- [x] Pending approval: shell-antes → esperando; sonar tras grace 1.5s (auto-run limpia)
 - [x] RAM main: hover sin loadURL repetido; dock place solo ABN_POSCHANGED; tasklist filtrado
 - [x] Perf: scrape UIA PS persistente; poll 1.6s; scrape 6–13s; RAF solo poses animadas
 - [ ] Focus Cursor Mac/Linux

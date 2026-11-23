@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import {
   fileAprobacion,
+  fileAprobacionSaid,
   fileBusqueda,
   fileEstado,
   fileFrase,
@@ -175,13 +176,21 @@ export function writeUltima(stateDir: string, id: string, marca: 'cierre' | 'pre
   writeAtomic(fileUltima(stateDir, id), marca, 'utf8');
 }
 
-export function markAprobacion(stateDir: string, id: string): void {
+export function markAprobacion(stateDir: string, id: string, at = Date.now()): void {
   ensureStateDir(stateDir);
-  writeAtomic(fileAprobacion(stateDir, id), '1', 'utf8');
+  // epoch ms → panel confirma sonar tras grace (auto-run limpia antes)
+  writeAtomic(fileAprobacion(stateDir, id), String(at), 'utf8');
+}
+
+/** Evita segundo sonar tras grace cuando ya se anunció (smart o panel). */
+export function markAprobacionSaid(stateDir: string, id: string, at = Date.now()): void {
+  ensureStateDir(stateDir);
+  writeAtomic(fileAprobacionSaid(stateDir, id), String(at), 'utf8');
 }
 
 export function clearAprobacion(stateDir: string, id: string): void {
   removeFile(fileAprobacion(stateDir, id));
+  removeFile(fileAprobacionSaid(stateDir, id));
 }
 
 export function markBusqueda(stateDir: string, id: string): void {

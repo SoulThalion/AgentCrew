@@ -13,6 +13,25 @@
         "timeout": 10
       }
     ],
+    "beforeShellExecution": [
+      {
+        "command": "node ./hooks/agentcrew-hook.mjs --evento shell-antes",
+        "timeout": 10
+      }
+    ],
+    "afterShellExecution": [
+      {
+        "command": "node ./hooks/agentcrew-hook.mjs --evento shell-despues",
+        "timeout": 10
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "node ./hooks/agentcrew-hook.mjs --evento tool-fail",
+        "matcher": "Shell",
+        "timeout": 10
+      }
+    ],
     "preToolUse": [
       {
         "command": "node ./hooks/agentcrew-hook.mjs --evento switch",

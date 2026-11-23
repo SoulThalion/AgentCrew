@@ -12,8 +12,11 @@ Cada entrada: comando CLI Node (objetivo) con timeout corto; stdin = JSON del ev
 | `beforeSubmitPrompt` | — | prompt → estado trabajando/planificando; marcar run; asegurar panel |
 | `preToolUse` SwitchMode | SwitchMode | modo; estado `esperando` |
 | `preToolUse` AskQuestion | AskQuestion | espera |
-| `preToolUse` Shell | Shell | si smart approval → aprobación + espera |
-| `preToolUse` WebSearch | WebSearch | búsqueda + espera |
+| `beforeShellExecution` | — | marca aprobación + `esperando` (sonar tras grace en panel) |
+| `afterShellExecution` | — | auto-run / ya ejecutó → quita flag (sin aviso) |
+| `postToolUseFailure` Shell | Shell | reject/deny → quita espera |
+| `preToolUse` Shell | Shell | si smart approval → aprobación + espera + sonar |
+| `preToolUse` WebSearch | WebSearch | búsqueda + espera + sonar |
 | `preToolUse` Task | Task | marcar subagente |
 | `preToolUse` Read\|Grep\|Glob… | lectura | estado `leyendo` |
 | `postToolUse` AskQuestion\|… | fin espera parcial | quitar flags; volver a trabajar/plan |
