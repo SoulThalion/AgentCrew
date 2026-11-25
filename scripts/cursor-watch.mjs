@@ -30,14 +30,18 @@ const logPath = path.join(stateDir, 'cursor-watch.log');
 
 const POLL_MS = 2000;
 const START_COOLDOWN_MS = 15_000;
-/** Tras Cursor muerto, pedir al panel que salga (backup del auto-quit interno). */
-const CLOSE_PANEL_GRACE_MS = 5_000;
+/** Tras Cursor muerto confirmado, pedir al panel que salga (backup auto-quit). */
+const CLOSE_PANEL_GRACE_MS = 10_000;
+/** Cache probe: menos spam tasklist + suaviza flakes cortos. */
+const PROBE_CACHE_MS = 1500;
 
 let lastStart = 0;
 /** Último tick: ¿Cursor vivo? Para detectar edge down→up. */
 let cursorWas = null;
 /** Desde cuándo Cursor no aparece (para cerrar.txt). */
 let cursorGoneSince = 0;
+/** Última sonda fiable (fail-open reusa esto). */
+let probeCache = null;
 
 function claimWatchLock() {
   try {
@@ -134,7 +138,12 @@ function panelRunning() {
   return false;
 }
 
-function listProcessNames() {
+/**
+ * Sonda Cursor.exe / proceso Cursor.
+ * @returns {Promise<{ ok: true, alive: boolean } | { ok: false }>}
+ * Fail: timeout/spawn → ok:false (NO mapear a muerto; issue #4).
+ */
+function probeCursor() {
   return new Promise((resolve) => {
     if (process.platform === 'win32') {
       execFile(
@@ -142,27 +151,38 @@ function listProcessNames() {
         ['/FI', 'IMAGENAME eq Cursor.exe', '/NH'],
         { windowsHide: true, timeout: 5000, maxBuffer: 64 * 1024 },
         (err, stdout) => {
-          if (err || !stdout) return resolve([]);
-          resolve(/Cursor\.exe/i.test(String(stdout)) ? ['Cursor'] : []);
+          if (err) return resolve({ ok: false });
+          resolve({ ok: true, alive: /Cursor\.exe/i.test(String(stdout ?? '')) });
         },
       );
       return;
     }
     execFile('ps', ['-A', '-o', 'comm='], { timeout: 5000 }, (err, stdout) => {
-      if (err || !stdout) return resolve([]);
-      resolve(
-        String(stdout)
-          .split(/\n/)
-          .map((s) => path.basename(s.trim()))
-          .filter(Boolean),
-      );
+      if (err) return resolve({ ok: false });
+      if (!stdout) return resolve({ ok: true, alive: false });
+      const alive = String(stdout)
+        .split(/\n/)
+        .some((s) => path.basename(s.trim()).toLowerCase() === 'cursor');
+      resolve({ ok: true, alive });
     });
   });
 }
 
+/** ¿Cursor vivo? Probe fail → cache / último tick / asume vivo (paridad panel). */
 async function cursorRunning() {
-  const names = await listProcessNames();
-  return names.some((n) => n.toLowerCase() === 'cursor');
+  const now = Date.now();
+  if (probeCache && now - probeCache.at < PROBE_CACHE_MS) {
+    return probeCache.alive;
+  }
+  const probe = await probeCursor();
+  if (!probe.ok) {
+    if (probeCache) return probeCache.alive;
+    if (cursorWas === true) return true;
+    if (cursorWas === false) return false;
+    return true; // sin historial → fail-open (no cerrar.txt por flake)
+  }
+  probeCache = { at: now, alive: probe.alive };
+  return probe.alive;
 }
 
 function loadLaunch() {

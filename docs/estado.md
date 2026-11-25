@@ -61,6 +61,7 @@
 - [x] Watcher: install mata viejo; Cursor down→cerrar.txt; up→mostrar.txt
 - [x] Fantasmas Planificando (Task/QA): `isTrackedChat` + prune `isGhostBusyState`; no `subagentStop→sessionEnd`
 - [x] Sprite doble Terminado/sin frase: bind activo huérfano↔UI libre (ignora sticky de chats cerrados)
+- [x] Issue #4: watcher fail-open si `tasklist` flake (+ grace 10s + cache probe)
 - [ ] Focus Cursor Mac/Linux
 - [ ] QA subagente (límite modelo)
 
