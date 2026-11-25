@@ -426,11 +426,15 @@ function consumeMostrar(): void {
   try {
     if (!fs.existsSync(file)) return;
     fs.unlinkSync(file);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      layoutWindow(mainWindow);
-      mainWindow.show();
-      mainWindow.focus();
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createWindow();
+      return;
     }
+    // Tras panel:stop el dock se detachó — reenganchar (no solo show).
+    layoutWindow(mainWindow);
+    mainWindow.show();
+    mainWindow.focus();
+    if (!dockApi?.isAttached()) attachDock(mainWindow);
   } catch {
     /* ignore */
   }

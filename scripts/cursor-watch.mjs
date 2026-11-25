@@ -112,6 +112,25 @@ function pidAlive(pid) {
   }
 }
 
+/** Evita PID reciclado / hint spawn que no es el panel. */
+function pidLooksLikePanel(pid) {
+  if (!pidAlive(pid)) return false;
+  if (process.platform !== 'win32') return true;
+  return new Promise((resolve) => {
+    execFile(
+      'tasklist',
+      ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'],
+      { windowsHide: true, timeout: 4000, maxBuffer: 32 * 1024 },
+      (err, stdout) => {
+        if (err || !stdout) return resolve(false);
+        const t = String(stdout);
+        // CSV: "electron.exe","1234",...
+        resolve(/electron\.exe|AgentCrew\.exe/i.test(t));
+      },
+    );
+  });
+}
+
 function readPanelPid() {
   try {
     const n = Number.parseInt(fs.readFileSync(panelPidPath, 'utf8').trim(), 10);
@@ -131,8 +150,9 @@ function writePanelPidHint(pid) {
   }
 }
 
-function panelRunning() {
-  if (pidAlive(readPanelPid())) return true;
+async function panelRunning() {
+  const pid = readPanelPid();
+  if (pid && (await pidLooksLikePanel(pid))) return true;
   // Tras spawn, Electron tarda en escribir panel.pid; evita multi-lanzar
   if (lastStart > 0 && Date.now() - lastStart < START_COOLDOWN_MS) return true;
   return false;
@@ -219,9 +239,9 @@ function requestPanelClose() {
   }
 }
 
-function startPanel() {
+async function startPanel() {
   if (Date.now() - lastStart < START_COOLDOWN_MS) return;
-  if (panelRunning()) return;
+  if (await panelRunning()) return;
   const launch = loadLaunch();
   if (!launch) {
     log('sin panel-launch.json válido');
@@ -248,24 +268,22 @@ function startPanel() {
 async function tick() {
   if (disabled()) return;
   const cursor = await cursorRunning();
+  const panelUp = await panelRunning();
 
   // Edge Cursor off→on: permitir auto-start + mostrar si panel quedó oculto
   if (cursorWas === false && cursor === true) {
     clearUserClosed();
-    if (panelRunning()) requestPanelShow();
+    if (panelUp) requestPanelShow();
   }
   // Primer tick con Cursor ya abierto + panel vivo → mostrar (no solo “ya corre”)
-  if (cursorWas === null && cursor && panelRunning() && !userClosed()) {
+  if (cursorWas === null && cursor && panelUp && !userClosed()) {
     requestPanelShow();
   }
   cursorWas = cursor;
 
   if (!cursor) {
     if (!cursorGoneSince) cursorGoneSince = Date.now();
-    if (
-      panelRunning() &&
-      Date.now() - cursorGoneSince >= CLOSE_PANEL_GRACE_MS
-    ) {
+    if (panelUp && Date.now() - cursorGoneSince >= CLOSE_PANEL_GRACE_MS) {
       requestPanelClose();
     }
     return;
@@ -273,7 +291,7 @@ async function tick() {
 
   cursorGoneSince = 0;
   if (userClosed()) return;
-  if (!panelRunning()) startPanel();
+  if (!panelUp) await startPanel();
 }
 claimWatchLock();
 process.on('exit', releaseWatchLock);

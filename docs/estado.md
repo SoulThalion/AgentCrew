@@ -62,6 +62,7 @@
 - [x] Fantasmas Planificando (Task/QA): `isTrackedChat` + prune `isGhostBusyState`; no `subagentStop→sessionEnd`
 - [x] Sprite doble Terminado/sin frase: bind activo huérfano↔UI libre (ignora sticky de chats cerrados)
 - [x] Issue #4: watcher fail-open si `tasklist` flake (+ grace 10s + cache probe)
+- [x] Arranque: `panelRunning` exige electron/AgentCrew; `mostrar` reengancha dock tras Parar
 - [ ] Focus Cursor Mac/Linux
 - [ ] QA subagente (límite modelo)
 
