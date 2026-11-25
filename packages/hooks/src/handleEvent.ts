@@ -169,10 +169,13 @@ export function handleEvent(
 
       case 'espera': {
         if (id && isTrackedChat(stateDir, id)) {
-          // AskQuestion: marca pregunta para que stop no emita «fin» después.
+          // AskQuestion: marca pregunta para que stop no emita «fin».
+          // Si respuesta ya anunció (?), no reescribir sonar (doble voz).
+          const yaPregunta =
+            readText(fileUltima(stateDir, id))?.trim() === 'pregunta';
           writeUltima(stateDir, id, 'pregunta');
           writeEstado(stateDir, id, 'esperando');
-          writeSonar(stateDir, id, 'pregunta');
+          if (!yaPregunta) writeSonar(stateDir, id, 'pregunta');
         }
         return allow();
       }
@@ -302,13 +305,15 @@ export function handleEvent(
         if (!id || !isTrackedChat(stateDir, id)) return empty();
         const texto = field(raw, 'text');
         const marca = looksLikeQuestion(texto) ? 'pregunta' : 'cierre';
+        // AskQuestion (espera) a veces va antes: no second sonar.
+        const yaPregunta =
+          readText(fileUltima(stateDir, id))?.trim() === 'pregunta';
         writeUltima(stateDir, id, marca);
         const frase = lastSentence(texto);
         if (frase) writeFrase(stateDir, id, frase);
         if (marca === 'pregunta') {
           writeEstado(stateDir, id, 'esperando');
-          // Voz aquí (no en stop) para no duplicar con AskQuestion/espera ni con «fin».
-          writeSonar(stateDir, id, 'pregunta');
+          if (!yaPregunta) writeSonar(stateDir, id, 'pregunta');
         }
         return empty();
       }

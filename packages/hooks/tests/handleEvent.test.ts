@@ -131,6 +131,49 @@ describe('handleEvent', () => {
     expect(fs.readFileSync(path.join(dir, 'sonar-aq1.txt'), 'utf8').trim()).toBe('pregunta');
   });
 
+  it('respuesta ? + espera AskQuestion → un solo sonar pregunta', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'dup1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'respuesta',
+      JSON.stringify({ conversation_id: 'dup1', text: '¿Confirmas el cambio?' }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'sonar-dup1.txt'), 'utf8').trim()).toBe('pregunta');
+    // Simula panel consumió el sonar entre hooks
+    fs.unlinkSync(path.join(dir, 'sonar-dup1.txt'));
+    handleEvent(
+      'espera',
+      JSON.stringify({ conversation_id: 'dup1', tool_name: 'AskQuestion' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'sonar-dup1.txt'))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, 'ultima-dup1.txt'), 'utf8').trim()).toBe('pregunta');
+  });
+
+  it('espera AskQuestion + respuesta ? → un solo sonar pregunta', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'dup2', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'espera',
+      JSON.stringify({ conversation_id: 'dup2', tool_name: 'AskQuestion' }),
+      dir,
+    );
+    fs.unlinkSync(path.join(dir, 'sonar-dup2.txt'));
+    handleEvent(
+      'respuesta',
+      JSON.stringify({ conversation_id: 'dup2', text: '¿Seguimos?' }),
+      dir,
+    );
+    expect(fs.existsSync(path.join(dir, 'sonar-dup2.txt'))).toBe(false);
+  });
+
   it('stop status raro/vacío → detenido (no deja trabajando)', () => {
     handleEvent(
       'prompt',
