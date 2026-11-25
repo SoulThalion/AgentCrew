@@ -48,9 +48,18 @@ export function lastSentence(text: string): string {
   return (parts[parts.length - 1] ?? t).trim().slice(0, 280);
 }
 
+/** `?` de código, URL o query (`/settings?drive=connected`) no es pregunta al usuario. */
+function stripNonQuestions(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`\n]*`/g, ' ')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\?[A-Za-z0-9_=&%+./-]+/g, ' ');
+}
+
 export function looksLikeQuestion(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  if (t.includes('?') || t.includes('¿')) return true;
-  return /^(debería|quieres|confirmas|puedo|ok para)/i.test(t);
+  const sentence = stripNonQuestions(lastSentence(text)).trim();
+  if (!sentence) return false;
+  if (sentence.includes('?') || sentence.includes('¿')) return true;
+  return /^(debería|quieres|confirmas|puedo|ok para)\b/i.test(sentence);
 }

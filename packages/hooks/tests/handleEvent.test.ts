@@ -81,6 +81,33 @@ describe('handleEvent', () => {
     expect(fs.readFileSync(path.join(dir, 'sonar-pq1.txt'), 'utf8').trim()).toBe('pregunta');
   });
 
+  it('respuesta con ? en URL → cierre, no pregunta', () => {
+    handleEvent(
+      'prompt',
+      JSON.stringify({ conversation_id: 'url1', prompt: 'x', composer_mode: 'agent' }),
+      dir,
+    );
+    handleEvent(
+      'respuesta',
+      JSON.stringify({
+        conversation_id: 'url1',
+        text: 'El callback redirige a `/settings?drive=connected`. Hace falta un dominio fijo.',
+      }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'ultima-url1.txt'), 'utf8').trim()).toBe('cierre');
+    expect(fs.existsSync(path.join(dir, 'sonar-url1.txt'))).toBe(false);
+    handleEvent(
+      'stop',
+      JSON.stringify({ conversation_id: 'url1', status: 'completed' }),
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'estado-url1.txt'), 'utf8').startsWith('terminado|')).toBe(
+      true,
+    );
+    expect(fs.readFileSync(path.join(dir, 'sonar-url1.txt'), 'utf8').trim()).toBe('fin');
+  });
+
   it('espera AskQuestion + stop → solo sonar pregunta (no fin)', () => {
     handleEvent(
       'prompt',
