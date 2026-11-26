@@ -195,12 +195,15 @@ export function handleEvent(
       }
 
       case 'shell-antes': {
-        // beforeShellExecution dispara en auto-run Y en Pending approval.
-        // No hay señal fiable de card real aquí: afterShellExecution solo al
-        // terminar el comando → grace 1.5s sonaba en comandos largos auto-run.
-        // Voz/esperando solo vía preToolUse smart (aprobacion).
+        // beforeShellExecution: auto-run Y Pending approval (card Run).
+        // Marca aprobación candidata; panel confirma sonar tras grace + UIA
+        // (Run/Skip) — issue #8. Auto-run largo: afterShell limpia sin voz.
         if (id && isTrackedChat(stateDir, id)) {
           markShell(stateDir, id);
+          if (!fs.existsSync(fileAprobacion(stateDir, id))) {
+            markAprobacion(stateDir, id);
+          }
+          writeEstado(stateDir, id, 'esperando');
         }
         return allow();
       }

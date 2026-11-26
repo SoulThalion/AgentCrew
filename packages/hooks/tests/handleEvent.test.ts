@@ -292,7 +292,7 @@ describe('handleEvent', () => {
     );
   });
 
-  it('shell-antes auto-run: shell flag, sin esperando/aprobacion/sonar', () => {
+  it('shell-antes: shell + aprobacion candidata + esperando; sin sonar (panel/UIA)', () => {
     handleEvent(
       'prompt',
       JSON.stringify({ conversation_id: 'sh1', prompt: 'x', composer_mode: 'agent' }),
@@ -304,15 +304,16 @@ describe('handleEvent', () => {
       dir,
     );
     expect(r.stdout).toBe('{"permission":"allow"}');
-    expect(fs.readFileSync(path.join(dir, 'estado-sh1.txt'), 'utf8').startsWith('trabajando|')).toBe(
+    expect(fs.readFileSync(path.join(dir, 'estado-sh1.txt'), 'utf8').startsWith('esperando|')).toBe(
       true,
     );
     expect(fs.existsSync(path.join(dir, 'shell-sh1.txt'))).toBe(true);
-    expect(fs.existsSync(path.join(dir, 'aprobacion-sh1.txt'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'aprobacion-sh1.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'aprobacion-said-sh1.txt'))).toBe(false);
     expect(fs.existsSync(path.join(dir, 'sonar-sh1.txt'))).toBe(false);
   });
 
-  it('shell-despues limpia shell; estado sigue trabajando sin sonar', () => {
+  it('shell-despues limpia shell+aprobacion; vuelve trabajando sin sonar', () => {
     handleEvent(
       'prompt',
       JSON.stringify({ conversation_id: 'sh2', prompt: 'x', composer_mode: 'agent' }),
@@ -336,7 +337,7 @@ describe('handleEvent', () => {
     );
   });
 
-  it('tool-fail Shell limpia shell; no inventa aprobación', () => {
+  it('tool-fail Shell limpia shell+aprobacion candidata', () => {
     handleEvent(
       'prompt',
       JSON.stringify({ conversation_id: 'sh3', prompt: 'x', composer_mode: 'agent' }),
@@ -347,6 +348,7 @@ describe('handleEvent', () => {
       JSON.stringify({ conversation_id: 'sh3', command: 'rm -rf /' }),
       dir,
     );
+    expect(fs.existsSync(path.join(dir, 'aprobacion-sh3.txt'))).toBe(true);
     handleEvent(
       'tool-fail',
       JSON.stringify({

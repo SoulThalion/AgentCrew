@@ -57,7 +57,7 @@
 - [x] Sonar pregunta: respuesta+AskQuestion → un solo aviso (no doble voz)
 - [x] Issue #5: sticky/activo no pinta pin focused idle sin prompt↔título
 - [x] Issue #6: install-hooks quita `alarma-agente.ps1` (doble TTS)
-- [x] Pending approval voz: solo smart (`request_smart_mode_approval`); no grace shell-antes (falsos +)
+- [x] Pending approval voz: smart inmediato + shell-antes grace+UIA Run/Skip (issue #8; no falso auto-run)
 - [x] RAM main: hover sin loadURL repetido; dock place solo ABN_POSCHANGED; tasklist filtrado
 - [x] Perf: scrape UIA PS persistente; poll 1.6s; scrape 6–13s; RAF solo poses animadas
 - [x] **Cast** (MP3 AgentCrew, Settings on/off + dispositivo) — `16-plan-cast.md` C0–C3
@@ -67,6 +67,7 @@
 - [x] Issue #4: watcher fail-open si `tasklist` flake (+ grace 10s + cache probe)
 - [x] Arranque: `panelRunning` exige electron/AgentCrew; `mostrar` reengancha dock tras Parar
 - [x] Issue #7: Cast `pickLanIp` NIC misma /24 + timeout play + skip mDNS si host + Settings IP anuncio
+- [x] Issue #8: card Run Shell → voz aprobación (grace + UIA Run/Skip; smart sigue inmediato)
 - [ ] Focus Cursor Mac/Linux
 - [ ] QA subagente (límite modelo)
 

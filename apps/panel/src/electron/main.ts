@@ -31,6 +31,7 @@ import {
 } from './settingsStore';
 import { listPrivateLanIps, pickLanIp } from '@agentcrew/cast';
 import { listCastDevices, playMp3OnChosenCast, stopCastHttp } from './castRuntime';
+import { cursorShowsShellApprovalUi } from './shellApprovalUi';
 import { loadPanelPrefs, savePanelPrefs, type PanelPrefs } from './panelPrefs';
 import {
   loadStatePrefs,
@@ -539,12 +540,84 @@ function confirmPendingErrors(): void {
   }
 }
 
+/** shell-antes marca aprobación; auto-run limpia en afterShell.
+ * Tras grace + UIA (Run/Skip) → card real → sonar (issue #8). */
+const SHELL_APPROVAL_GRACE_MS = 1500;
+let approvalConfirmBusy = false;
+
+async function confirmPendingApprovals(): Promise<void> {
+  if (approvalConfirmBusy) return;
+  const dir = stateDir();
+  if (!fs.existsSync(dir)) return;
+  const now = Date.now();
+  const candidates: string[] = [];
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.startsWith('aprobacion-') || !name.endsWith('.txt')) continue;
+    if (name.startsWith('aprobacion-said-')) continue;
+    const id = name.slice('aprobacion-'.length, -'.txt'.length);
+    if (!id) continue;
+    const said = path.join(dir, `aprobacion-said-${id}.txt`);
+    if (fs.existsSync(said)) continue;
+    const full = path.join(dir, name);
+    let at = 0;
+    try {
+      const raw = fs.readFileSync(full, 'utf8').trim();
+      at = Number.parseInt(raw, 10);
+      if (!Number.isFinite(at)) at = fs.statSync(full).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (now - at < SHELL_APPROVAL_GRACE_MS) continue;
+    // Sin shell-* → ya corrió / canceló; no sonar
+    if (!fs.existsSync(path.join(dir, `shell-${id}.txt`))) {
+      try {
+        fs.unlinkSync(full);
+      } catch {
+        /* ignore */
+      }
+      continue;
+    }
+    candidates.push(id);
+  }
+  if (candidates.length === 0) return;
+
+  approvalConfirmBusy = true;
+  try {
+    // Win: UIA Run/Skip evita falso + en auto-run largo. Otros SO: grace sola.
+    const ui =
+      process.platform === 'win32' ? await cursorShowsShellApprovalUi() : true;
+    if (!ui) return; // auto-run / sin card → reintentar o afterShell limpia
+    const t = Date.now();
+    for (const id of candidates) {
+      const said = path.join(dir, `aprobacion-said-${id}.txt`);
+      if (fs.existsSync(said)) continue;
+      if (!fs.existsSync(path.join(dir, `shell-${id}.txt`))) continue;
+      try {
+        fs.writeFileSync(said, String(t), 'utf8');
+        fs.writeFileSync(path.join(dir, `sonar-${id}.txt`), 'aprobacion', 'utf8');
+      } catch {
+        /* ignore */
+      }
+    }
+  } finally {
+    approvalConfirmBusy = false;
+  }
+}
+
 function consumeSonar(): void {
   const dir = stateDir();
   if (!fs.existsSync(dir)) return;
   confirmPendingErrors();
-  // Sonar aprobación: solo hook smart (request_smart_mode_approval).
-  // Grace shell-antes→1.5s daba falsos positivos en auto-run largo.
+  void confirmPendingApprovals().then(() => {
+    // Sonar escrito async → siguiente tick consume; también intento inmediato
+    drainSonarFiles();
+  });
+  drainSonarFiles();
+}
+
+function drainSonarFiles(): void {
+  const dir = stateDir();
+  if (!fs.existsSync(dir)) return;
   syncTtsFromState();
   const tipos: string[] = [];
   for (const name of fs.readdirSync(dir)) {
@@ -572,7 +645,6 @@ function consumeSonar(): void {
       ),
     );
   }
-  // Último aviso de lote: varios agentes acabaron y usuario inactivo (o "siempre")
   if (takeAllDoneAnnounce(allDoneTracker, working, statePrefs.cuando)) {
     enqueueSpeak(() =>
       speakTipo(

@@ -12,9 +12,9 @@ Cada entrada: comando CLI Node (objetivo) con timeout corto; stdin = JSON del ev
 | `beforeSubmitPrompt` | — | prompt → estado trabajando/planificando; marcar run; asegurar panel |
 | `preToolUse` SwitchMode | SwitchMode | modo; estado `esperando` |
 | `preToolUse` AskQuestion | AskQuestion | espera |
-| `beforeShellExecution` | — | marca `shell-*` only (no sonar: auto-run indistinguible) |
-| `afterShellExecution` | — | limpia `shell-*`; si había smart-aprobación → trabajando |
-| `preToolUse` Shell smart | `request_smart_mode_approval` | `esperando` + sonar `aprobacion` |
+| `beforeShellExecution` | — | `shell-*` + aprobación candidata + `esperando`; panel confirma sonar tras grace+UIA Run/Skip (#8) |
+| `afterShellExecution` | — | limpia `shell-*` + aprobación; vuelve trabajando |
+| `preToolUse` Shell smart | `request_smart_mode_approval` | `esperando` + sonar `aprobacion` inmediato |
 | `postToolUseFailure` Shell | Shell | reject/deny → quita espera |
 | `preToolUse` Shell | Shell | si smart approval → aprobación + espera + sonar |
 | `preToolUse` WebSearch | WebSearch | búsqueda + espera + sonar |
