@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   composeChats,
+  fuzzyTitleMatch,
   writeEstado,
   writeTitulo,
   writePrompt,
@@ -11,6 +12,32 @@ import {
   markVisto,
   clearRun,
 } from '../src/index.js';
+
+describe('fuzzyTitleMatch issue #9', () => {
+  it('match corto / ticket reorder', () => {
+    expect(
+      fuzzyTitleMatch('Analiza ticket Jira 4224', 'Jira ticket 4224 analysis'),
+    ).toBe(true);
+    expect(
+      fuzzyTitleMatch('Sidebar footer sync layout', 'Sidebar footer sync'),
+    ).toBe(true);
+  });
+
+  it('prosa larga con mención no matchea', () => {
+    expect(
+      fuzzyTitleMatch(
+        'En el chat Jira ticket 4216 review ya pedí review; ahora mira otra cosa distinta del todo',
+        'Jira ticket 4216 review',
+      ),
+    ).toBe(false);
+    expect(
+      fuzzyTitleMatch(
+        'Vuelve a revisar y no dejes comentarios a no ser que sean necesarios',
+        'Codebase Memory MCP usage, anclado',
+      ),
+    ).toBe(false);
+  });
+});
 
 describe('composeChats', () => {
   let dir: string;
@@ -232,5 +259,47 @@ describe('composeChats', () => {
     expect(tix?.id).toBe('70a6');
     expect(tix?.state).toBe('terminado');
     expect(list.filter((a) => a.id.startsWith('ui:'))).toHaveLength(0);
+  });
+
+  it('issue #9: activo sticky Memory + prompt Jira-like → no pinta en Memory', () => {
+    writeEstado(dir, 'jira', 'subagentes');
+    writeTitulo(dir, 'jira', 'Codebase Memory MCP usage, anclado');
+    writePrompt(
+      dir,
+      'jira',
+      'Vuelve a revisar y no dejes comentarios a no ser que sean necesarios',
+    );
+    writeEstado(dir, 'mem', 'terminado');
+    writeTitulo(dir, 'mem', 'Codebase Memory MCP usage');
+    clearRun(dir, 'mem');
+    const list = composeChats(dir, {
+      uiTitles: [
+        'Codebase Memory MCP usage, anclado',
+        'Jira ticket 4216 review',
+      ],
+      focusedTitles: ['Codebase Memory MCP usage, anclado'],
+    });
+    const mem = list.find((a) => a.title.includes('Codebase Memory'));
+    expect(mem?.id).not.toBe('jira');
+    expect(mem?.state).not.toBe('subagentes');
+  });
+
+  it('issue #9: prosa que cita Jira no bind a tab Jira', () => {
+    writeEstado(dir, 'chat', 'trabajando');
+    writePrompt(
+      dir,
+      'chat',
+      'En el chat Jira ticket 4216 review ya pedí review; ahora mira Codebase Memory y resume',
+    );
+    const list = composeChats(dir, {
+      uiTitles: [
+        'Codebase Memory MCP usage, anclado',
+        'Jira ticket 4216 review',
+      ],
+      focusedTitles: ['Codebase Memory MCP usage, anclado'],
+    });
+    const jira = list.find((a) => a.title.includes('Jira'));
+    expect(jira?.id?.startsWith('ui:') || jira?.id !== 'chat').toBe(true);
+    expect(jira?.state).not.toBe('trabajando');
   });
 });

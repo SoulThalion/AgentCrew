@@ -36,24 +36,49 @@ function tokensOf(norm: string): string[] {
 /**
  * Prompt ↔ título UI sin igualdad exacta (ej. "Analiza ticket Jira 4224"
  * vs "Jira ticket 4224 analysis").
+ * Issue #9: prosa larga que solo menciona el título ≠ match.
  */
 export function fuzzyTitleMatch(promptOrTitleA: string, titleB: string): boolean {
   const a = normalizeTitle(promptOrTitleA);
   const b = normalizeTitle(titleB);
   if (!a || !b) return false;
   if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
+
   const ta = tokensOf(a);
   const tb = tokensOf(b);
+  if (tb.length === 0) return false;
+
+  // Contención: título dentro de prompt solo si prompt ~ tamaño del título
+  // (si no, es mención en prosa — #9).
+  if (a.includes(b)) {
+    if (a.length <= Math.max(b.length * 2, b.length + 24)) return true;
+  }
+  // Prompt corto contenido en título (prefijo / rename UI)
+  if (b.includes(a) && a.length >= 8) return true;
+
   const digA = ta.filter((t) => /^\d{3,}$/.test(t));
   const digB = tb.filter((t) => /^\d{3,}$/.test(t));
   if (digA.length > 0 && digB.length > 0) {
     if (!digA.some((d) => digB.includes(d))) return false;
   }
-  const shared = tb.filter((t) => ta.includes(t) && t.length >= 3);
-  if (shared.some((t) => t.length >= 5)) return true;
-  if (shared.length >= 2) return true;
-  if (digA.length > 0 && digB.length > 0 && shared.length >= 1) return true;
+
+  const titleToks = tb.filter((t) => t.length >= 3);
+  const shared = titleToks.filter((t) => ta.includes(t));
+  const coverage = shared.length / Math.max(1, titleToks.length);
+  const promptLong = a.length > b.length * 2.5;
+  if (promptLong) {
+    // Mención incidental: hace falta casi todo el título y poco ruido extra
+    if (coverage < 0.8) return false;
+    if (ta.length - shared.length > titleToks.length + 3) return false;
+  } else if (coverage < 0.45 && shared.length < 2) {
+    return false;
+  }
+
+  if (shared.some((t) => t.length >= 5) && coverage >= 0.5) return true;
+  if (shared.length >= 2 && coverage >= 0.5) return true;
+  if (digA.length > 0 && digB.length > 0 && shared.length >= 1 && coverage >= 0.5) {
+    return true;
+  }
   return false;
 }
 
@@ -192,10 +217,19 @@ export function composeChats(
       }
       const tit = normalizeTitle(readTitulo(stateDir, a.id));
       if (tit && tit === clave) {
-        byTitulo.push(a);
-        continue;
+        // #9: sticky stale — activo cuyo prompt ya no matchea este tab
+        if (
+          ACTIVE.has(String(a.state)) &&
+          prompt &&
+          !fuzzyTitleMatch(prompt, title)
+        ) {
+          // no byTitulo; puede fuzzy a otro UI
+        } else {
+          byTitulo.push(a);
+          continue;
+        }
       }
-      if (prompt && fuzzyTitleMatch(prompt, clave)) byFuzzy.push(a);
+      if (prompt && fuzzyTitleMatch(prompt, title)) byFuzzy.push(a);
     }
     const elegido =
       pickOne(stateDir, byPrompt) ??

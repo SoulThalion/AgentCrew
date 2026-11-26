@@ -348,10 +348,20 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     'subagentes',
   ]);
 
-  // Pre-pass: sticky apunta a tab A pero prompt es tab B abierto → limpiar
+  // Pre-pass: sticky contaminado → limpiar (#5 exacto otro tab; #9 stale activo)
   for (const c of cands) {
     if (!c.tituloN || !uiNormSet.has(c.tituloN)) continue;
     if (c.promptN && uiNormSet.has(c.promptN) && c.promptN !== c.tituloN) {
+      clearTitulo(stateDir, c.id);
+      c.tituloN = '';
+      updated++;
+      continue;
+    }
+    const ag = agents.find((x) => x.id === c.id);
+    if (!ag || !ACTIVE.has(String(ag.state)) || !c.promptN) continue;
+    if (c.promptN === c.tituloN) continue;
+    const uiTitle = uiTitles.find((t) => norm(t) === c.tituloN);
+    if (uiTitle && !fuzzyTitleMatch(c.promptN, uiTitle)) {
       clearTitulo(stateDir, c.id);
       c.tituloN = '';
       updated++;

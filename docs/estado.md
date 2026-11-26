@@ -68,6 +68,7 @@
 - [x] Arranque: `panelRunning` exige electron/AgentCrew; `mostrar` reengancha dock tras Parar
 - [x] Issue #7: Cast `pickLanIp` NIC misma /24 + timeout play + skip mDNS si host + Settings IP anuncio
 - [x] Issue #8: card Run Shell → voz aprobación (grace + UIA Run/Skip; smart sigue inmediato)
+- [x] Issue #9: sticky stale activo + fuzzy sin menciones en prosa (#5 residual)
 - [ ] Focus Cursor Mac/Linux
 - [ ] QA subagente (límite modelo)
 

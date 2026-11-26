@@ -49,4 +49,19 @@ describe('matchAndSaveTitles issue #5', () => {
     matchAndSaveTitles(dir, ['Same sticky', 'Free other tab']);
     expect(readTitulo(dir, 'b').trim()).not.toBe('Free other tab');
   });
+
+  it('issue #9: activo sticky Memory + prompt sin match → clear sticky', () => {
+    writeEstado(dir, 'jira', 'subagentes');
+    writeTitulo(dir, 'jira', 'Codebase Memory MCP usage, anclado');
+    writePrompt(
+      dir,
+      'jira',
+      'Vuelve a revisar y no dejes comentarios a no ser que sean necesarios',
+    );
+    matchAndSaveTitles(dir, [
+      'Codebase Memory MCP usage, anclado',
+      'Jira ticket 4216 review',
+    ]);
+    expect(readTitulo(dir, 'jira').trim()).not.toMatch(/Codebase Memory/i);
+  });
 });
