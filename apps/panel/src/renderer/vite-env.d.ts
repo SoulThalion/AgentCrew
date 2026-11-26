@@ -37,6 +37,14 @@ interface AgentCrewApi {
     url?: string;
     error?: string;
   }>;
+  listCastLanIps: (opts?: {
+    announceIp?: string;
+    preferHost?: string;
+  }) => Promise<{
+    ok: boolean;
+    ips: string[];
+    resolved: string;
+  }>;
   openSettings: () => Promise<boolean>;
   openFishPortal: () => Promise<{ ok: boolean; url: string }>;
   listDisplays: () => Promise<{

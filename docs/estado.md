@@ -55,6 +55,8 @@
 - [x] Issue #3: error-pending 6s (no falso sonar) + compose fuzzy / sin fill tab idle
 - [x] Sonar: stop+pregunta no duplica fin (ultima=pregunta → esperando, sin fin)
 - [x] Sonar pregunta: respuesta+AskQuestion → un solo aviso (no doble voz)
+- [x] Issue #5: sticky/activo no pinta pin focused idle sin prompt↔título
+- [x] Issue #6: install-hooks quita `alarma-agente.ps1` (doble TTS)
 - [x] Pending approval voz: solo smart (`request_smart_mode_approval`); no grace shell-antes (falsos +)
 - [x] RAM main: hover sin loadURL repetido; dock place solo ABN_POSCHANGED; tasklist filtrado
 - [x] Perf: scrape UIA PS persistente; poll 1.6s; scrape 6–13s; RAF solo poses animadas
@@ -64,6 +66,7 @@
 - [x] Sprite doble Terminado/sin frase: bind activo huérfano↔UI libre (ignora sticky de chats cerrados)
 - [x] Issue #4: watcher fail-open si `tasklist` flake (+ grace 10s + cache probe)
 - [x] Arranque: `panelRunning` exige electron/AgentCrew; `mostrar` reengancha dock tras Parar
+- [x] Issue #7: Cast `pickLanIp` NIC misma /24 + timeout play + skip mDNS si host + Settings IP anuncio
 - [ ] Focus Cursor Mac/Linux
 - [ ] QA subagente (límite modelo)
 

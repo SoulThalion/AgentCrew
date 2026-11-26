@@ -220,31 +220,33 @@ export function composeChats(
     if (tit && clavesUi.has(tit)) return false;
     return true;
   });
+  // Activo huérfano ↔ UI libre solo con prompt↔título (issue #5: no foco UIA idle).
   const activeHuerfanos = huerfanos.filter((a) => ACTIVE.has(String(a.state)));
-  if (activeHuerfanos.length === 1) {
-    const h = activeHuerfanos[0]!;
-    const focusedUnmatched = unmatchedIdx.filter((i) =>
-      focusedNorm.has(normalizeTitle(uiTitles[i]!)),
-    );
-    const bindIdx =
-      focusedUnmatched.length === 1
-        ? focusedUnmatched[0]!
-        : unmatchedIdx.length === 1
-          ? unmatchedIdx[0]!
-          : undefined;
-    if (bindIdx !== undefined) {
-      used.add(h.id);
-      assigned.set(bindIdx, h);
-      unmatchedIdx.splice(unmatchedIdx.indexOf(bindIdx), 1);
-      consumeInactiveSiblings(normalizeTitle(uiTitles[bindIdx]!));
-    }
-  } else if (unmatchedIdx.length === 1 && huerfanos.length === 1) {
-    const i = unmatchedIdx[0]!;
-    const h = huerfanos[0]!;
+  for (const h of activeHuerfanos) {
+    const prompt = readPromptNorm(stateDir, h.id);
+    if (!prompt) continue;
+    const hits = unmatchedIdx.filter((i) => {
+      const title = uiTitles[i]!;
+      const clave = normalizeTitle(title);
+      return prompt === clave || fuzzyTitleMatch(prompt, title);
+    });
+    if (hits.length !== 1) continue;
+    const bindIdx = hits[0]!;
     used.add(h.id);
-    assigned.set(i, h);
-    unmatchedIdx.length = 0;
-    consumeInactiveSiblings(normalizeTitle(uiTitles[i]!));
+    assigned.set(bindIdx, h);
+    unmatchedIdx.splice(unmatchedIdx.indexOf(bindIdx), 1);
+    consumeInactiveSiblings(normalizeTitle(uiTitles[bindIdx]!));
+  }
+  // Renombre 1:1 inactivo (legado): un huérfano + un UI sin match.
+  if (unmatchedIdx.length === 1 && huerfanos.filter((a) => !used.has(a.id)).length === 1) {
+    const i = unmatchedIdx[0]!;
+    const h = huerfanos.find((a) => !used.has(a.id))!;
+    if (!ACTIVE.has(String(h.state))) {
+      used.add(h.id);
+      assigned.set(i, h);
+      unmatchedIdx.length = 0;
+      consumeInactiveSiblings(normalizeTitle(uiTitles[i]!));
+    }
   }
 
   // UI sin match: solo prompt exacto / fuzzy. NUNCA meter activo en tab idle fijado.

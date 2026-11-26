@@ -7,6 +7,7 @@ import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isLegacyHookCommand } from './legacy-hooks.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cursor = path.join(process.env.USERPROFILE || process.env.HOME || '', '.cursor');
@@ -43,10 +44,8 @@ if (!current.hooks) current.hooks = {};
 for (const [event, entries] of Object.entries(newHooks.hooks || {})) {
   const incoming = Array.isArray(entries) ? entries : [];
   const existing = Array.isArray(current.hooks[event]) ? current.hooks[event] : [];
-  // Sustituir comandos agentcrew viejos / rotos por el bundle actual
-  const filtered = existing.filter(
-    (e) => !String(e.command || '').includes('agentcrew-hook'),
-  );
+  // Sustituir agentcrew + legacy PS; no dejar alarma-agente junto al bundle Node
+  const filtered = existing.filter((e) => !isLegacyHookCommand(e.command));
   const cmds = new Set(filtered.map((e) => String(e.command || '').trim()));
   const merged = [...filtered];
   for (const e of incoming) {
@@ -57,6 +56,16 @@ for (const [event, entries] of Object.entries(newHooks.hooks || {})) {
     }
   }
   current.hooks[event] = merged;
+}
+
+// Eventos solo-legacy (no en template): limpiar PS / hooks viejos
+for (const event of Object.keys(current.hooks)) {
+  if (newHooks.hooks?.[event]) continue;
+  const kept = (current.hooks[event] || []).filter(
+    (e) => !isLegacyHookCommand(e.command),
+  );
+  if (kept.length === 0) delete current.hooks[event];
+  else current.hooks[event] = kept;
 }
 
 // subagentStop no debe limpiar: Cursor envía conversation_id del padre

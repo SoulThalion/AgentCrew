@@ -15,6 +15,8 @@ export class CastHttpServer {
   private server: http.Server | null = null;
   private port = DEFAULT_CAST_HTTP_PORT;
   private announceIp = '';
+  /** IP Cast device → pickLanIp elige NIC misma subred (issue #7). */
+  private preferHost = '';
   private clips = new Map<string, Clip>();
 
   get listening(): boolean {
@@ -25,9 +27,14 @@ export class CastHttpServer {
     return this.port;
   }
 
-  async start(port = DEFAULT_CAST_HTTP_PORT, announceIp = ''): Promise<void> {
+  async start(
+    port = DEFAULT_CAST_HTTP_PORT,
+    announceIp = '',
+    preferHost = '',
+  ): Promise<void> {
     this.port = port > 0 ? port : DEFAULT_CAST_HTTP_PORT;
     this.announceIp = announceIp;
+    this.preferHost = preferHost;
     if (this.server?.listening) return;
 
     this.server = http.createServer((req, res) => this.handle(req, res));
@@ -59,7 +66,7 @@ export class CastHttpServer {
     const id = createHash('sha256').update(body).digest('hex').slice(0, 16);
     const name = `frase-${id}.mp3`;
     this.clips.set(id, { body, name });
-    const host = pickLanIp(this.announceIp);
+    const host = pickLanIp(this.announceIp, this.preferHost);
     return `http://${host}:${this.port}/${name}?v=${Date.now()}`;
   }
 

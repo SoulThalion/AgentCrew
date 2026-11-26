@@ -29,6 +29,7 @@ import {
   settingsPublic,
   type AppSettings,
 } from './settingsStore';
+import { listPrivateLanIps, pickLanIp } from '@agentcrew/cast';
 import { listCastDevices, playMp3OnChosenCast, stopCastHttp } from './castRuntime';
 import { loadPanelPrefs, savePanelPrefs, type PanelPrefs } from './panelPrefs';
 import {
@@ -883,6 +884,25 @@ function registerIpc(): void {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   });
+  ipcMain.handle(
+    'cast:lanIps',
+    (
+      _e,
+      opts?: { announceIp?: string; preferHost?: string },
+    ) => {
+      const announce =
+        typeof opts?.announceIp === 'string'
+          ? opts.announceIp
+          : ttsSettings.castAnnounceIp;
+      const prefer =
+        typeof opts?.preferHost === 'string'
+          ? opts.preferHost
+          : ttsSettings.castDeviceHost;
+      const ips = listPrivateLanIps();
+      const resolved = pickLanIp(announce, prefer);
+      return { ok: true, ips, resolved };
+    },
+  );
   ipcMain.handle('settings:open', () => {
     openSettings();
     return true;

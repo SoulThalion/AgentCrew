@@ -12,8 +12,9 @@ const httpServer = new CastHttpServer();
 export async function ensureCastHttp(
   port = DEFAULT_CAST_HTTP_PORT,
   announceIp = '',
+  preferHost = '',
 ): Promise<void> {
-  await httpServer.start(port, announceIp);
+  await httpServer.start(port, announceIp, preferHost);
 }
 
 export async function stopCastHttp(): Promise<void> {
@@ -41,18 +42,30 @@ export async function playMp3OnChosenCast(opts: {
   announceIp?: string;
   holdMs?: number;
 }): Promise<{ device: CastDevice; url: string }> {
-  await ensureCastHttp(opts.port ?? DEFAULT_CAST_HTTP_PORT, opts.announceIp ?? '');
-  const url = castUrlForMp3(opts.absPath);
   let host = opts.host?.trim() || '';
   let device: CastDevice | null = null;
-  if (!host || opts.name) {
+
+  // Host ya elegido → no redescubrir (evita spinner + mDNS lento). Issue #7.
+  if (host) {
+    device = {
+      name: (opts.name || '').trim() || host,
+      host,
+      port: 8009,
+    };
+  } else {
     const devices = await listCastDevices(5000);
-    device = matchCastDevice(devices, { host, name: opts.name });
+    device = matchCastDevice(devices, { name: opts.name });
     if (!device) throw new Error('No hay dispositivo Cast');
     host = device.host;
-  } else {
-    device = { name: host, host, port: 8009 };
   }
+
+  // preferHost = Cast IP → NIC misma /24 en URL del MP3
+  await ensureCastHttp(
+    opts.port ?? DEFAULT_CAST_HTTP_PORT,
+    opts.announceIp ?? '',
+    host,
+  );
+  const url = castUrlForMp3(opts.absPath);
   await playMp3OnCast({ host, mediaUrl: url, holdMs: opts.holdMs });
   return { device, url };
 }

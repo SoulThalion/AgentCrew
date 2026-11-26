@@ -122,28 +122,40 @@ describe('composeChats', () => {
     expect(list[0]?.state).toBe('atento');
   });
 
-  it('activo sin sticky + huérfanos viejos → bind al UI libre (no orphan doble)', () => {
+  it('activo sin sticky + prompt fuzzy → bind UI libre', () => {
     writeEstado(dir, 'vivo', 'leyendo');
-    writePrompt(dir, 'vivo', 'Ha aparecido otro sprite Terminado');
+    writePrompt(dir, 'vivo', 'Sidebar footer sync layout');
     writeFrase(dir, 'vivo', 'ultima frase del asistente');
-    // sin titulo sticky
     writeEstado(dir, 'viejo', 'terminado');
-    writeTitulo(dir, 'viejo', 'Project technology stack advice'); // cerrado, no en UI
+    writeTitulo(dir, 'viejo', 'Project technology stack advice');
     writePrompt(dir, 'viejo', 'otra cosa');
     writeEstado(dir, 'otro', 'terminado');
     writeTitulo(dir, 'otro', 'MiraiWay phase 4');
     writePrompt(dir, 'otro', 'MiraiWay phase 4');
-    const list = composeChats(dir, {
+    const matched = composeChats(dir, {
       uiTitles: ['Sidebar footer sync', 'MiraiWay phase 4'],
       focusedTitles: ['Sidebar footer sync'],
     });
-    const tab = list.find((a) => a.title === 'Sidebar footer sync');
-    expect(tab?.id).toBe('vivo');
-    expect(tab?.phrase).toBe('ultima frase del asistente');
-    expect(list.filter((a) => a.id === 'vivo')).toHaveLength(1);
-    expect(list.some((a) => a.id === 'vivo' && a.title.startsWith('Ha aparecido'))).toBe(
-      false,
-    );
+    expect(matched.find((a) => a.title === 'Sidebar footer sync')?.id).toBe('vivo');
+  });
+
+  it('issue #5: chat nuevo sin match no pinta trabajando en pin focused idle', () => {
+    writeEstado(dir, 'neu', 'trabajando');
+    writePrompt(dir, 'neu', 'Implement currency and date columns in the grid');
+    const crossed = composeChats(dir, {
+      uiTitles: [
+        'Codebase Memory MCP usage, anclado',
+        'Jira ticket 4216 review',
+        'Feature table formatting',
+      ],
+      focusedTitles: ['Jira ticket 4216 review'],
+    });
+    const jira = crossed.find((a) => a.title.includes('Jira'));
+    expect(jira?.id?.startsWith('ui:')).toBe(true);
+    expect(jira?.state).toBe('atento');
+    const orphan = crossed.find((a) => a.id === 'neu');
+    expect(orphan?.state).toBe('trabajando');
+    expect(orphan?.title).not.toMatch(/Jira/i);
   });
 
   it('fuzzy prompt↔UI asigna activo; sticky malo no pinta tab idle', () => {

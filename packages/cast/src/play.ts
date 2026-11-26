@@ -29,6 +29,8 @@ export type PlayCastOptions = {
   mediaUrl: string;
   /** Cerrar cliente tras N ms (default 8). */
   holdMs?: number;
+  /** Timeout connect+load (default 12s). */
+  connectTimeoutMs?: number;
   title?: string;
 };
 
@@ -38,12 +40,22 @@ export type PlayCastOptions = {
  */
 export function playMp3OnCast(opts: PlayCastOptions): Promise<void> {
   const holdMs = opts.holdMs ?? 8000;
+  /** Connect+load: URL inalcanzable no debe colgar Settings (issue #7). */
+  const connectTimeoutMs = opts.connectTimeoutMs ?? 12_000;
   return new Promise((resolve, reject) => {
     const client = new Client();
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const clear = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
     const fail = (err: Error) => {
       if (settled) return;
       settled = true;
+      clear();
       try {
         client.close();
       } catch {
@@ -54,6 +66,7 @@ export function playMp3OnCast(opts: PlayCastOptions): Promise<void> {
     const ok = () => {
       if (settled) return;
       settled = true;
+      clear();
       try {
         client.close();
       } catch {
@@ -61,6 +74,14 @@ export function playMp3OnCast(opts: PlayCastOptions): Promise<void> {
       }
       resolve();
     };
+
+    timer = setTimeout(() => {
+      fail(
+        new Error(
+          `Cast timeout (${connectTimeoutMs}ms) host=${opts.host} url=${opts.mediaUrl}`,
+        ),
+      );
+    }, connectTimeoutMs);
 
     client.on('error', fail);
     client.connect(opts.host, () => {
@@ -79,6 +100,7 @@ export function playMp3OnCast(opts: PlayCastOptions): Promise<void> {
         };
         player.load(media, { autoplay: true }, (loadErr) => {
           if (loadErr) return fail(loadErr);
+          clear();
           setTimeout(ok, holdMs);
         });
       });

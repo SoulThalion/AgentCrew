@@ -41,4 +41,6 @@ Errores: nunca tumbar el hook; log + respuesta segura (legacy `exit 0` / allow).
 
 ## Instalación
 
-`installer/` copia hooks + `hooks.json` + arranca panel. Ver fase instalador en `09-roadmap.md`.
+`installer/` / `npm run install-hooks` bundle Node + merge `~/.cursor/hooks.json`.
+Al merge **quita** legacy `alarma-agente.ps1` / `agentcrew-hook` viejo (issue #6: doble TTS).
+Ver fase instalador en `09-roadmap.md`.

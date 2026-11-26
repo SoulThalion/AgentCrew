@@ -50,11 +50,28 @@ export function Settings() {
   const [primaryId, setPrimaryId] = useState<number | null>(null);
   const [ready, setReady] = useState(false);
   const [castDevices, setCastDevices] = useState<CastDeviceOpt[]>([]);
+  const [lanIps, setLanIps] = useState<string[]>([]);
+  const [resolvedLanIp, setResolvedLanIp] = useState('');
   const sRef = useRef(s);
   const readyRef = useRef(false);
   const lastSavedRef = useRef('');
   sRef.current = s;
   readyRef.current = ready;
+
+  function refreshLanIps(view?: SettingsView) {
+    const api = window.agentcrew;
+    if (!api?.listCastLanIps) return;
+    const cur = view ?? sRef.current;
+    void api
+      .listCastLanIps({
+        announceIp: cur.castAnnounceIp,
+        preferHost: cur.castDeviceHost,
+      })
+      .then((raw) => {
+        setLanIps(Array.isArray(raw.ips) ? raw.ips : []);
+        setResolvedLanIp(typeof raw.resolved === 'string' ? raw.resolved : '');
+      });
+  }
 
   useEffect(() => {
     document.title = 'Ajustes TTS';
@@ -85,7 +102,13 @@ export function Settings() {
         setPrimaryId(d.primaryId ?? null);
       })
       .catch(() => setStatus('No se pudieron listar pantallas'));
+    refreshLanIps();
   }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    refreshLanIps(s);
+  }, [ready, s.castAnnounceIp, s.castDeviceHost]);
 
   async function save(quiet = false) {
     const api = window.agentcrew;
@@ -329,7 +352,7 @@ export function Settings() {
           <div className="text-xs font-medium text-zinc-300">Cast / Google Home</div>
           <p className="text-[11px] leading-snug text-zinc-500">
             Mismo MP3 AgentCrew (no voz Google). Misma Wi‑Fi. Firewall puede bloquear el
-            puerto {s.castHttpPort}.
+            puerto {s.castHttpPort}. URL del MP3 usa IP LAN que el Cast pueda alcanzar.
           </p>
           <label className="flex items-center gap-2">
             <input
@@ -372,13 +395,43 @@ export function Settings() {
           </label>
           <input
             className="w-full rounded border border-zinc-700 bg-zinc-800 p-2 disabled:opacity-50"
-            placeholder="IP manual (opcional)"
+            placeholder="IP Cast manual (opcional)"
             disabled={!s.castEnabled}
             value={s.castDeviceHost}
             onChange={(e) =>
               setS({ ...s, castDeviceHost: e.target.value.trim() })
             }
           />
+          <label className="block">
+            <span className="text-zinc-400">IP de este PC (anuncio HTTP)</span>
+            <select
+              className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 p-2 disabled:opacity-50"
+              disabled={!s.castEnabled}
+              value={s.castAnnounceIp}
+              onChange={(e) =>
+                setS({ ...s, castAnnounceIp: e.target.value })
+              }
+            >
+              <option value="">
+                Auto
+                {resolvedLanIp ? ` → ${resolvedLanIp}` : ''}
+              </option>
+              {lanIps.map((ip) => (
+                <option key={ip} value={ip}>
+                  {ip}
+                </option>
+              ))}
+              {s.castAnnounceIp && !lanIps.includes(s.castAnnounceIp) ? (
+                <option value={s.castAnnounceIp}>{s.castAnnounceIp}</option>
+              ) : null}
+            </select>
+          </label>
+          {s.castEnabled && s.castDeviceHost && resolvedLanIp ? (
+            <p className="text-[11px] leading-snug text-amber-400/90">
+              Cast {s.castDeviceHost} ← MP3 vía {resolvedLanIp}:{s.castHttpPort}. Si
+              spinner cuelga: elegir IP Wi‑Fi (misma /24 que el Cast), no VPN/Hyper-V.
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"

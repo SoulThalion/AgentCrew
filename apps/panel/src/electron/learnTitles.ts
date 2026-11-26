@@ -455,23 +455,9 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     const ag = agents.find((x) => x.id === c.id);
     return ag && ACTIVE_STATES.has(String(ag.state));
   });
-  // 1 activo sin sticky + 1 UI libre (u 1 foco libre) → pegar sticky.
-  // No exigir orphans.length===1: chats cerrados sin titulo no deben bloquear.
-  if (activeOrphans.length === 1) {
-    const only = activeOrphans[0]!;
-    const focusedFree = focused.filter((t) => freeUi.some((u) => norm(u) === norm(t)));
-    const target =
-      focusedFree.length === 1
-        ? focusedFree[0]!
-        : freeUi.length === 1
-          ? freeUi[0]!
-          : null;
-    if (target && assign(only.id, target)) {
-      freeUi = freeUi.filter((t) => norm(t) !== norm(target));
-    }
-  }
+  // Issue #5: NUNCA pegar activo huérfano al tab focused/libre sin match
+  // prompt↔título (UIA sigue en pin idle mientras el user escribe en chat nuevo).
   if (freeUi.length > 0 && activeOrphans.some((c) => !used.has(c.id))) {
-    // 1 activo huérfano + UI libre fuzzy → sticky ahí (nunca al primer fijado por orden)
     for (const c of activeOrphans) {
       if (!c.promptN || used.has(c.id)) continue;
       const hits = freeUi.filter((t) => fuzzyTitleMatch(c.promptN, t));
@@ -509,6 +495,10 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
       if (c.promptN === tn) continue;
       const ag = agents.find((x) => x.id === c.id);
       if (ag && ACTIVE.has(String(ag.state))) {
+        // Soltar sticky contaminado para poder reasignar a freeUi con match (#5)
+        clearTitulo(stateDir, c.id);
+        c.tituloN = '';
+        updated++;
         pool.push(c);
       } else {
         // Inactivo con sticky contaminado → limpiar
@@ -529,10 +519,12 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
   freeUi = uiTitles.filter((t) => !ownedTitulos.has(norm(t)));
   for (const title of freeUi) {
     const titleN = norm(title);
-    // Preferir surplus cuyo prompt sea este tab
+    // Solo surplus con prompt↔título (exacto o fuzzy). Nunca pool[0] a ciegas (#5).
     let nextIdx = pool.findIndex((c) => c.promptN === titleN);
-    if (nextIdx < 0) nextIdx = pool.length > 0 ? 0 : -1;
-    if (nextIdx < 0) break;
+    if (nextIdx < 0) {
+      nextIdx = pool.findIndex((c) => c.promptN && fuzzyTitleMatch(c.promptN, title));
+    }
+    if (nextIdx < 0) continue;
     const next = pool.splice(nextIdx, 1)[0]!;
     if (next.tituloN === titleN) {
       used.add(next.id);
