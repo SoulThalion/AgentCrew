@@ -46,9 +46,8 @@ export function loadStatePrefs(stateDir: string): PanelStatePrefs {
       } else muted = true;
     }
   }
-  const volRaw = readText(stateDir, 'volumen.txt');
-  let volume = 100;
-  if (volRaw === '30' || volRaw === '60' || volRaw === '100') volume = Number(volRaw);
+  const fromFile = readVolume(stateDir);
+  const volume = fromFile ?? 100;
   const aviso: AvisoMode = readText(stateDir, 'aviso.txt') === 'sonido' ? 'sonido' : 'voz';
   const cuando: CuandoMode =
     readText(stateDir, 'cuando.txt') === 'siempre' ? 'siempre' : 'inactivo';
@@ -78,8 +77,17 @@ export function setMuted(stateDir: string, muted: boolean, untilIso?: string): P
   return loadStatePrefs(stateDir);
 }
 
+/** `volumen.txt` ausente o ilegible → null. Si no, 0–100. */
+export function readVolume(stateDir: string): number | null {
+  const volRaw = readText(stateDir, 'volumen.txt');
+  if (!volRaw) return null;
+  const n = Number(volRaw);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
 export function setVolume(stateDir: string, level: number): PanelStatePrefs {
-  const v = level === 30 || level === 60 ? level : 100;
+  const v = Number.isFinite(level) ? Math.max(0, Math.min(100, Math.round(level))) : 100;
   writeText(stateDir, 'volumen.txt', String(v));
   return loadStatePrefs(stateDir);
 }

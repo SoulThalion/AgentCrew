@@ -71,6 +71,7 @@
 - [x] Issue #14: plan-build se ancla al tab Ticket, no al focused ajeno
 - [x] Issue #15: un chat ajeno no quita el sticky del tab focused
 - [x] Issue #9: sticky contaminado solo si prompt → otro tab UI; fuzzy sin prosa; follow-up no limpia
+- [x] Volumen TTS: slider 0–100 en `volumen.txt` y en el MP3 (antes siempre 100)
 - [ ] Focus Cursor Mac/Linux
 - [ ] QA subagente (límite modelo)
 

@@ -43,6 +43,10 @@ Tensiones ya aceptadas:
 
 Issue nuevo: fila en esta tabla, con su test. Luego los tests del eje.
 
+## Audio
+
+- Volumen del slider (0–100) se guarda en `volumen.txt` y el MP3 lo usa. Sin ese archivo, no se sustituye el valor de ajustes por 100. Pruebas: `playVolume`, `statePrefsVolume`.
+
 ## Ampliar
 
 | Duda | Documento |

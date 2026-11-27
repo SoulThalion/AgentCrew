@@ -38,7 +38,7 @@ Pipeline: texto → hash → `voces/frase-<hash>.mp3` → cache runtime → prov
 ## Conceptos de control
 
 - **Mute** (`mudo.txt`): silencia avisos (timestamp o flag)
-- **Volumen** (`volumen.txt`)
+- **Volumen** (`volumen.txt`, 0–100): el slider de Ajustes y la bandeja escriben el mismo archivo; la reproducción del MP3 lo aplica
 - **Cuando avisar** (`cuando.txt`): p.ej. `siempre` vs umbral inactividad (~120 s)
 - **Vigilante**: proceso/loop que suena tras idle si hay pendiente
 - **Run** (`run-<id>.txt`): turno agent en curso

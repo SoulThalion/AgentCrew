@@ -43,8 +43,10 @@ import {
 import { loadPanelPrefs, savePanelPrefs, type PanelPrefs } from './panelPrefs';
 import {
   loadStatePrefs,
+  readVolume,
   setMuted as writeMuted,
   setMuestra as writeMuestra,
+  setVolume,
   type PanelStatePrefs,
 } from './statePrefs';
 import { createTray, destroyTray, refreshTray } from './trayMenu';
@@ -136,10 +138,13 @@ function loadStatePrefsFallback(): PanelStatePrefs {
 
 function syncTtsFromState(): void {
   statePrefs = loadStatePrefs(stateDir());
+  const fromFile = readVolume(stateDir());
+  const volume = fromFile ?? ttsSettings.volume;
+  statePrefs = { ...statePrefs, volume };
   ttsSettings = {
     ...ttsSettings,
     muted: statePrefs.muted,
-    volume: statePrefs.volume,
+    volume,
   };
 }
 
@@ -941,6 +946,10 @@ function registerIpc(): void {
       if (patch.elevenApiKey === '********') next.elevenApiKey = ttsSettings.elevenApiKey;
       if (patch.fishApiKey === '') next.fishApiKey = '';
       if (patch.elevenApiKey === '') next.elevenApiKey = '';
+      if (typeof next.volume === 'number' && Number.isFinite(next.volume)) {
+        statePrefs = setVolume(stateDir(), next.volume);
+        next.volume = statePrefs.volume;
+      }
       ttsSettings = next;
       saveSettings(ttsSettings);
       return settingsPublic(ttsSettings);

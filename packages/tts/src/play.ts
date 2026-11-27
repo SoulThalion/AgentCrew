@@ -50,15 +50,29 @@ function runPowerShell(scriptBody: string): Promise<boolean> {
   });
 }
 
+/** 0–100. Fuera de rango o NaN → 100. */
+export function clampVolume(volume: number): number {
+  if (!Number.isFinite(volume)) return 100;
+  return Math.max(0, Math.min(100, Math.round(volume)));
+}
+
+/** MCI setaudio: 0–1000. */
+export function mciVolumeLevel(volume: number): number {
+  return clampVolume(volume) * 10;
+}
+
 /**
  * Reproduce MP3 vía MCI (legacy ReproductorMp3 / winmm).
  * WMPlayer.OCX fallaba: playState 0 → cierre sin audio.
+ * Volumen del slider: setaudio … volume to (0–1000).
  */
-export function playMp3(filePath: string, _volume = 80): Promise<boolean> {
+export function playMp3(filePath: string, volume = 80): Promise<boolean> {
   if (!fs.existsSync(filePath)) return Promise.resolve(false);
   const platform = process.platform;
+  const level = clampVolume(volume);
   if (platform === 'win32') {
     const escaped = filePath.replace(/'/g, "''");
+    const mci = mciVolumeLevel(level);
     // Here-string @' '@: el C# llega literal; comillas de ruta con \"
     const ps = [
       "$ErrorActionPreference = 'Stop'",
@@ -69,29 +83,32 @@ export function playMp3(filePath: string, _volume = 80): Promise<boolean> {
       'public static class AgentCrewMci {',
       '  [DllImport("winmm.dll", CharSet = CharSet.Auto)]',
       '  public static extern int mciSendString(string comando, StringBuilder retorno, int largo, IntPtr ventana);',
-      '  public static void Play(string ruta) {',
+      '  public static void Play(string ruta, int volumen) {',
       '    string alias = "agentcrewvoz";',
       '    mciSendString("close " + alias, null, 0, IntPtr.Zero);',
       '    int abierto = mciSendString("open \\"" + ruta + "\\" type mpegvideo alias " + alias, null, 0, IntPtr.Zero);',
       '    if (abierto != 0) throw new InvalidOperationException("mci open " + abierto);',
+      '    mciSendString("setaudio " + alias + " volume to " + volumen, null, 0, IntPtr.Zero);',
       '    int tocado = mciSendString("play " + alias + " wait", null, 0, IntPtr.Zero);',
       '    mciSendString("close " + alias, null, 0, IntPtr.Zero);',
       '    if (tocado != 0) throw new InvalidOperationException("mci play " + tocado);',
       '  }',
       '}',
       "'@",
-      `[AgentCrewMci]::Play('${escaped}')`,
+      `[AgentCrewMci]::Play('${escaped}', ${mci})`,
     ].join('\n');
     return runPowerShell(ps);
   }
   return new Promise((resolve) => {
     let child;
     if (platform === 'darwin') {
-      child = spawn('afplay', [filePath], { stdio: 'ignore' });
+      child = spawn('afplay', ['-v', (level / 100).toFixed(2), filePath], {
+        stdio: 'ignore',
+      });
     } else {
       child = spawn(
         'ffplay',
-        ['-nodisp', '-autoexit', '-loglevel', 'quiet', filePath],
+        ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-volume', String(level), filePath],
         { stdio: 'ignore' },
       );
     }
