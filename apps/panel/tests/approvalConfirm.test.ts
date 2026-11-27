@@ -4,6 +4,7 @@ import {
   commandSnippet,
   matchCommandRunning,
   readShellCommand,
+  userShellStarted,
   SHELL_APPROVAL_BACKGROUND_MS,
 } from '../src/electron/approvalConfirm.js';
 
@@ -59,6 +60,27 @@ describe('approval sonar issue #12', () => {
   it('comando corto no se usa como prueba', () => {
     expect(commandSnippet('npm t')).toBe('');
     expect(matchCommandRunning('npm t', [], 0)).toBe(null);
+  });
+
+  it('powershell nuevo sin el texto del comando → auto-run (#13)', () => {
+    const since = 5_000_000;
+    const procs = [
+      {
+        t: since + 300,
+        c: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -Command "Get-Date"',
+      },
+    ];
+    expect(userShellStarted(procs, since)).toBe(true);
+    expect(matchCommandRunning('npm test -w @agentcrew/core', procs, since)).toBe(true);
+  });
+
+  it('sonda WMI no cuenta como shell del usuario', () => {
+    const since = 5_000_000;
+    const procs = [
+      { t: since + 300, c: 'powershell.exe -Command Get-CimInstance Win32_Process' },
+    ];
+    expect(userShellStarted(procs, since)).toBe(false);
+    expect(matchCommandRunning('npm test -w @agentcrew/core', procs, since)).toBe(false);
   });
 
   it('lee el comando bajo el timestamp', () => {

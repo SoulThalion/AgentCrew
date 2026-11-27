@@ -27,6 +27,7 @@ Leer también `docs/README.md` y `docs/estado.md`.
 3. Estados/archivos → `04-dominio.md` / `05-contrato-estado.md` (no inventar)
 4. Skills: lean-build / surgical-patch / electron-* / react-vite según capa
 5. No ampliar PowerShell salvo hotfix temporal documentado
+6. Bug o issue → invariantes del mismo eje en [17-regresiones-issues.md](./17-regresiones-issues.md)
 
 ## Prompt corto para chat nuevo
 

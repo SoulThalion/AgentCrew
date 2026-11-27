@@ -1,7 +1,7 @@
 /**
  * #8: auto-run largo deja shell+aprobacion vivos sin card → no sonar.
- * #12: la card Run de un chat en background no está en el árbol UIA.
- * Si el comando ya tiene proceso, es auto-run. Si no, tras una espera corta, es aprobación.
+ * #12: sin card y sin ningún shell nuevo, tras la espera, es aprobación.
+ * #13: un powershell/cmd nuevo cuenta como auto-run aunque el texto no coincida.
  */
 import { execFile } from 'node:child_process';
 
@@ -23,6 +23,22 @@ export function approvalSonarDecision(opts: {
   return 'wait';
 }
 
+const PROBE_SHELL = /get-ciminstance|uiautomation|automationelement/;
+
+/** Shell de usuario (no la sonda UIA/WMI del panel) arrancado tras el marker. */
+export function userShellStarted(
+  procs: { t: number; c: string }[],
+  sinceMs: number,
+): boolean {
+  const since = sinceMs - 2000;
+  return procs.some((p) => {
+    if (p.t < since) return false;
+    const c = p.c.toLowerCase();
+    if (PROBE_SHELL.test(c)) return false;
+    return /powershell|pwsh(?:\.exe)?|cmd\.exe|bash(?:\.exe)?/.test(c);
+  });
+}
+
 export function commandSnippet(command: string): string {
   const n = command.toLowerCase().replace(/\s+/g, ' ').trim();
   if (n.length < 8) return '';
@@ -35,11 +51,15 @@ export function matchCommandRunning(
   sinceMs: number,
 ): boolean | null {
   const snippet = commandSnippet(command);
-  if (!snippet) return null;
   const since = sinceMs - 2000;
-  return procs.some(
-    (p) => p.t >= since && p.c.toLowerCase().replace(/\s+/g, ' ').includes(snippet),
-  );
+  const textHit =
+    !!snippet &&
+    procs.some(
+      (p) => p.t >= since && p.c.toLowerCase().replace(/\s+/g, ' ').includes(snippet),
+    );
+  if (textHit || userShellStarted(procs, sinceMs)) return true;
+  if (!snippet) return null;
+  return false;
 }
 
 export function readShellCommand(raw: string): string {

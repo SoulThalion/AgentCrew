@@ -21,6 +21,7 @@ Panel de agentes Cursor (migración desde un panel PowerShell/WPF). Repo: este d
 | 12 | [12-tts-proveedores.md](./12-tts-proveedores.md) | Fish + ElevenLabs, Settings, keys |
 | 15 | [15-cursor-watch.md](./15-cursor-watch.md) | Abrir/cerrar panel con el IDE Cursor |
 | 16 | [16-plan-cast.md](./16-plan-cast.md) | Cast → Google Home / Nest (opcional) |
+| 17 | [17-regresiones-issues.md](./17-regresiones-issues.md) | Invariantes de issues; no deshacer el eje al arreglar otro |
 
 Raíz: [AGENTS.md](../AGENTS.md). Rules/skills: `.cursor/rules/`, `.agents/skills/`.
 

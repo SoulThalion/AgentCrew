@@ -344,6 +344,30 @@ describe('composeChats', () => {
     expect(list.find((a) => a.title.includes('Ticket 4220'))?.id).not.toBe('report');
   });
 
+  it('issue #14: plan-build no roba el focused ajeno', () => {
+    writeEstado(dir, 'here', 'esperando');
+    writePrompt(dir, 'here', 'AgentCrew repository installation sigue con sprites cruzados');
+    writeEstado(dir, 'plan', 'subagentes');
+    writeTitulo(dir, 'plan', 'AgentCrew repository installation');
+    writePrompt(
+      dir,
+      'plan',
+      'Implement the plan as specified, it is attached for your reference',
+    );
+    const list = composeChats(dir, {
+      uiTitles: [
+        'Codebase Memory MCP usage, anclado',
+        'AgentCrew repository installation',
+        'Ticket 4220 migration plan',
+      ],
+      focusedTitles: ['AgentCrew repository installation'],
+    });
+    expect(list.find((a) => a.title.includes('AgentCrew'))?.id).toBe('here');
+    expect(list.find((a) => a.title.includes('Ticket 4220'))?.id).toBe('plan');
+    expect(list.filter((a) => a.id === 'plan')).toHaveLength(1);
+    expect(list.filter((a) => a.id === 'here')).toHaveLength(1);
+  });
+
   it('issue #11: boilerplate conserva el sticky del tab focused', () => {
     writeEstado(dir, 'ticket', 'planificando');
     writeTitulo(dir, 'ticket', 'Ticket 4220 migration plan');

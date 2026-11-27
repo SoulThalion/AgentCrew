@@ -106,6 +106,14 @@ export function isPlanBoilerplate(text: string): boolean {
   return normalizeTitle(text).startsWith('implement the plan');
 }
 
+/** Tab de un ticket (Ticket/Jira + id). El plan-build solo se ancla aquí (#14). */
+export function isTicketTab(title: string): boolean {
+  const toks = normalizeTitle(title).split(/\s+/).filter(Boolean);
+  const hasWord = toks.some((t) => t === 'ticket' || t === 'jira');
+  const hasDigit = toks.some((t) => /^\d{3,}$/.test(t));
+  return hasWord && hasDigit;
+}
+
 /**
  * Follow-up corto del mismo chat (#9). No incluye el boilerplate del plan
  * ni un prompt que nombra otro ticket.
@@ -290,6 +298,45 @@ export function composeChats(
     }
   }
 
+  // #14: un solo plan-build va al único tab Ticket, no al focused ajeno.
+  const ticketIdxs = uiTitles
+    .map((t, i) => (isTicketTab(t) ? i : -1))
+    .filter((i) => i >= 0);
+  let vacatedFocus: number | null = null;
+  if (ticketIdxs.length === 1 && focusedNorm.size === 1) {
+    const tIdx = ticketIdxs[0]!;
+    const tClave = normalizeTitle(uiTitles[tIdx]!);
+    const plans = rawAgents.filter(
+      (a) =>
+        ACTIVE.has(String(a.state)) && isPlanBoilerplate(readPromptNorm(stateDir, a.id)),
+    );
+    if (plans.length === 1) {
+      const plan = plans[0]!;
+      const already =
+        normalizeTitle(readTitulo(stateDir, plan.id)) === tClave &&
+        assigned.get(tIdx)?.id === plan.id;
+      if (!already) {
+        const focusClaveEarly = [...focusedNorm][0]!;
+        const focusIdxEarly = uiTitles.findIndex((t) => normalizeTitle(t) === focusClaveEarly);
+        for (const [idx, agent] of [...assigned.entries()]) {
+          if (agent.id !== plan.id || idx === tIdx) continue;
+          assigned.delete(idx);
+          if (idx === focusIdxEarly) vacatedFocus = idx;
+          if (!unmatchedIdx.includes(idx)) unmatchedIdx.push(idx);
+        }
+        const holderT = assigned.get(tIdx);
+        if (holderT && holderT.id !== plan.id) {
+          used.delete(holderT.id);
+          assigned.delete(tIdx);
+        }
+        used.add(plan.id);
+        assigned.set(tIdx, plan);
+        const dropT = unmatchedIdx.indexOf(tIdx);
+        if (dropT >= 0) unmatchedIdx.splice(dropT, 1);
+      }
+    }
+  }
+
   // #11: un activo sin tab propio reclama el focused si el ocupante no sostiene
   // el título, si el prompt es el boilerplate del plan, o si solo hay ese tab.
   // #5: chat nuevo con tarea real no pisa un pin focused vacío entre varios tabs.
@@ -337,21 +384,38 @@ export function composeChats(
       let pick =
         untitled.length === 1 ? untitled[0] : needy.length === 1 ? needy[0] : null;
       const prompt = pick ? readPromptNorm(stateDir, pick.id) : '';
+      const focusIsTicket = isTicketTab(uiTitles[focusIdx]!);
+      const ticketOpen = uiTitles.some((t) => isTicketTab(t));
+      const boilerplateClaims =
+        isPlanBoilerplate(prompt) && (focusIsTicket || !ticketOpen);
       let allow =
         !!pick &&
-        (!holderOk &&
-          (!!holder ||
-            isPlanBoilerplate(prompt) ||
-            uiTitles.length === 1));
+        (!holderOk && (!!holder || boilerplateClaims || uiTitles.length === 1));
       // Mención «ticket 4220» no retiene el tab si el build del plan está suelto.
       const planBuilds = rawAgents.filter((a) => {
         if (!ACTIVE.has(String(a.state))) return false;
         if (!isPlanBoilerplate(readPromptNorm(stateDir, a.id))) return false;
         return normalizeTitle(readTitulo(stateDir, a.id)) !== focusClave;
       });
-      if (planBuilds.length === 1 && planBuilds[0]!.id !== holder?.id) {
+      if (
+        planBuilds.length === 1 &&
+        planBuilds[0]!.id !== holder?.id &&
+        focusIsTicket
+      ) {
         pick = planBuilds[0]!;
         allow = true;
+      }
+      if (vacatedFocus === focusIdx && !assigned.has(focusIdx)) {
+        const rest = rawAgents.filter(
+          (a) =>
+            ACTIVE.has(String(a.state)) &&
+            !used.has(a.id) &&
+            !isPlanBoilerplate(readPromptNorm(stateDir, a.id)),
+        );
+        if (rest.length === 1) {
+          pick = rest[0]!;
+          allow = true;
+        }
       }
       if (allow && pick) {
         if (holder && holder.id !== pick.id) used.delete(holder.id);

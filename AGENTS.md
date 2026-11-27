@@ -22,7 +22,7 @@ Audio: `voces/` + `@agentcrew/tts` + Settings Fish/ElevenLabs. Hooks → `sonar-
 
 ## Rules siempre
 
-`caveman.mdc`, `qa-todo-gate.mdc` (QA modelo barato), `token-thrift.mdc`, `panel-agentes.mdc`.  
+`caveman.mdc`, `qa-todo-gate.mdc` (QA modelo barato), `token-thrift.mdc`, `panel-agentes.mdc`, `regresiones-issues.mdc`.  
 UI: `tailwind-first-styles.mdc`, `theme-light-dark.mdc`, `frontend-component-size.mdc`.
 
 ## Skills

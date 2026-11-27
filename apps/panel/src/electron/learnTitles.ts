@@ -18,6 +18,7 @@ import {
   fuzzyTitleMatch,
   promptNamesOtherTicket,
   isPlanBoilerplate,
+  isTicketTab,
   isShortFollowUp,
 } from '@agentcrew/core';
 
@@ -378,8 +379,12 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     const otherTicket = !matchesOwn && promptNamesOtherTicket(c.promptN, c.tituloN);
     const focusN = focused.length === 1 ? norm(focused[0]!) : '';
     const boilerplate = isPlanBoilerplate(c.promptN);
-    // Boilerplate en el tab focused se queda (#11). En otro tab, se suelta.
-    const keepBoilerplate = boilerplate && (!focusN || c.tituloN === focusN);
+    // En un tab Ticket se queda. En un focused ajeno, no (#14): hay tab de plan.
+    const keepBoilerplate =
+      boilerplate &&
+      (isTicketTab(c.tituloN) ||
+        c.tituloN === focusN ||
+        (!uiTitles.some((t) => isTicketTab(t)) && !focusN));
     const keepFocus =
       !!focusN &&
       c.tituloN === focusN &&
@@ -481,6 +486,30 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     }
   }
 
+  // #14: el plan-build del único Ticket no se queda en el focused ajeno.
+  const ticketTabs = uiTitles.filter((t) => isTicketTab(t));
+  let vacatedFocus = false;
+  if (ticketTabs.length === 1 && focused.length === 1) {
+    const ticketTitle = ticketTabs[0]!;
+    const ticketN = norm(ticketTitle);
+    const focusN0 = norm(focused[0]!);
+    const plans = cands.filter((c) => {
+      const ag = agents.find((x) => x.id === c.id);
+      return !!ag && ACTIVE.has(String(ag.state)) && isPlanBoilerplate(c.promptN);
+    });
+    if (plans.length === 1 && plans[0]!.tituloN !== ticketN) {
+      const plan = plans[0]!;
+      for (const c of cands) {
+        if (c.id === plan.id || c.tituloN !== ticketN) continue;
+        clearTitulo(stateDir, c.id);
+        c.tituloN = '';
+        updated++;
+      }
+      if (plan.tituloN === focusN0 && focusN0 !== ticketN) vacatedFocus = true;
+      assign(plan.id, ticketTitle, { force: true });
+    }
+  }
+
   // #11: el activo del chat focused reclama ese tab (force).
   if (focused.length === 1) {
     const focusTitle = focused[0]!;
@@ -510,19 +539,39 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     });
     const untitled = needy.filter((c) => c.tituloN !== focusN);
     let pick = untitled.length === 1 ? untitled[0] : needy.length === 1 ? needy[0] : null;
+    const focusIsTicket = isTicketTab(focusTitle);
+    const boilerplateClaims =
+      !!pick &&
+      isPlanBoilerplate(pick.promptN) &&
+      (focusIsTicket || !uiTitles.some((t) => isTicketTab(t)));
     let allow =
       !!pick &&
       !holderOk &&
-      (!!holder || isPlanBoilerplate(pick.promptN) || uiTitles.length === 1);
+      (!!holder || boilerplateClaims || uiTitles.length === 1);
     const planBuilds = cands.filter((c) => {
       const ag = agents.find((x) => x.id === c.id);
       if (!ag || !ACTIVE.has(String(ag.state))) return false;
       if (!isPlanBoilerplate(c.promptN)) return false;
       return c.tituloN !== focusN;
     });
-    if (planBuilds.length === 1 && planBuilds[0]!.id !== holder?.id) {
+    if (planBuilds.length === 1 && planBuilds[0]!.id !== holder?.id && focusIsTicket) {
       pick = planBuilds[0]!;
       allow = true;
+    }
+    if (vacatedFocus && !cands.some((c) => c.tituloN === focusN && c.id !== pick?.id)) {
+      const rest = cands.filter((c) => {
+        const ag = agents.find((x) => x.id === c.id);
+        return (
+          !!ag &&
+          ACTIVE.has(String(ag.state)) &&
+          !isPlanBoilerplate(c.promptN) &&
+          c.tituloN !== focusN
+        );
+      });
+      if (rest.length === 1) {
+        pick = rest[0]!;
+        allow = true;
+      }
     }
     if (allow && pick) {
       if (holder && holder.id !== pick.id) {

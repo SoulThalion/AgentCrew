@@ -1,0 +1,15 @@
+---
+description: Antes de arreglar un issue, conservar los invariantes de los issues del mismo eje
+alwaysApply: true
+---
+
+# Regresiones de issues
+
+Al corregir un bug o un issue de GitHub, el arreglo nuevo convive con los que ya estaban verdes.
+
+## Pasos
+
+1. Abre [docs/17-regresiones-issues.md](../../docs/17-regresiones-issues.md). Marca el eje del cambio (sticky/foco, voz aprobación, u otra fila).
+2. El fix lleva un test con el número de issue.
+3. Corre los tests de las filas de ese eje. Hecho = esos tests en verde, más el test nuevo.
+4. Si el comportamiento de una fila vecina cambia, actualiza esa fila y su test en el mismo cambio.
