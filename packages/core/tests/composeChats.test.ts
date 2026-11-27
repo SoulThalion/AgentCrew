@@ -23,6 +23,13 @@ describe('fuzzyTitleMatch issue #9', () => {
     ).toBe(true);
   });
 
+  it('issue #10: ticket id en prompt largo matchea sin el resto del título', () => {
+    const prompt =
+      'Vamos a entrar en el ticket 4220, solo pide migrar la pantalla de Cobros';
+    expect(fuzzyTitleMatch(prompt, 'Ticket 4220 migration plan')).toBe(true);
+    expect(fuzzyTitleMatch(prompt, 'AgentCrew repository installation')).toBe(false);
+  });
+
   it('prosa larga con mención no matchea', () => {
     expect(
       fuzzyTitleMatch(

@@ -62,14 +62,23 @@ export function fuzzyTitleMatch(promptOrTitleA: string, titleB: string): boolean
     if (!digA.some((d) => digB.includes(d))) return false;
   }
 
+  const ticketWord = (toks: string[]) => toks.some((t) => t === 'ticket' || t === 'jira');
+  const sharedDigit = digA.some((d) => digB.includes(d));
+  // #10: «ticket 4220» en prompt largo basta; no exigir migration/plan.
+  // Cobertura alta + mucho ruido sigue siendo mención (#9).
+  const strongTicket = sharedDigit && ticketWord(ta) && ticketWord(tb);
+
   const titleToks = tb.filter((t) => t.length >= 3);
   const shared = titleToks.filter((t) => ta.includes(t));
   const coverage = shared.length / Math.max(1, titleToks.length);
   const promptLong = a.length > b.length * 2.5;
   if (promptLong) {
     // Mención incidental: hace falta casi todo el título y poco ruido extra
-    if (coverage < 0.8) return false;
-    if (ta.length - shared.length > titleToks.length + 3) return false;
+    if (coverage < 0.8) {
+      if (!strongTicket) return false;
+    } else if (ta.length - shared.length > titleToks.length + 3) {
+      return false;
+    }
   } else if (coverage < 0.45 && shared.length < 2) {
     return false;
   }
@@ -80,6 +89,16 @@ export function fuzzyTitleMatch(promptOrTitleA: string, titleB: string): boolean
     return true;
   }
   return false;
+}
+
+/** Prompt cita un ticket (dígito ≥3 + ticket/jira) que el título no tiene. */
+export function promptNamesOtherTicket(prompt: string, title: string): boolean {
+  const a = normalizeTitle(prompt).split(/\s+/);
+  const b = new Set(normalizeTitle(title).split(/\s+/));
+  const digs = a.filter((t) => /^\d{3,}$/.test(t));
+  if (digs.length === 0) return false;
+  if (!a.some((t) => t === 'ticket' || t === 'jira')) return false;
+  return digs.some((d) => !b.has(d));
 }
 
 function readPromptNorm(stateDir: string, id: string): string {
@@ -223,8 +242,11 @@ export function composeChats(
           const otherUi = [...clavesUi].some(
             (o) => o !== clave && fuzzyTitleMatch(prompt, o),
           );
-          if (otherUi && !fuzzyTitleMatch(prompt, title)) {
-            // contaminado hacia otro tab → no byTitulo aquí
+          if (
+            (otherUi || promptNamesOtherTicket(prompt, title)) &&
+            !fuzzyTitleMatch(prompt, title)
+          ) {
+            // contaminado hacia otro tab o otro ticket → no byTitulo aquí
           } else {
             byTitulo.push(a);
             continue;

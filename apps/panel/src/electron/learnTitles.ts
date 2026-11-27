@@ -16,6 +16,7 @@ import {
   filePrompt,
   resolveFocusedIds,
   fuzzyTitleMatch,
+  promptNamesOtherTicket,
 } from '@agentcrew/core';
 
 let busy = false;
@@ -348,8 +349,8 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     'subagentes',
   ]);
 
-  // Pre-pass: sticky contaminado solo si prompt apunta a OTRO tab UI.
-  // Follow-up («ok», «revisa X») NO limpia sticky del mismo chat (regresión #9).
+  // Pre-pass: soltar sticky que el prompt no sostiene.
+  // Follow-up corto sin otro ticket no limpia (#9). Prompt de otro ticket sí (#10).
   for (const c of cands) {
     if (!c.tituloN || !uiNormSet.has(c.tituloN) || !c.promptN) continue;
     if (c.promptN === c.tituloN) continue;
@@ -361,11 +362,18 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     }
     const ag = agents.find((x) => x.id === c.id);
     if (!ag || !ACTIVE.has(String(ag.state))) continue;
+    const matchesOwn = fuzzyTitleMatch(c.promptN, c.tituloN);
     const otherHits = uiTitles.filter((t) => {
       const n = norm(t);
       return n !== c.tituloN && fuzzyTitleMatch(c.promptN, t);
     });
-    if (otherHits.length === 1) {
+    const blocksOwner =
+      !matchesOwn &&
+      cands.some(
+        (o) => o.id !== c.id && !!o.promptN && fuzzyTitleMatch(o.promptN, c.tituloN),
+      );
+    const otherTicket = !matchesOwn && promptNamesOtherTicket(c.promptN, c.tituloN);
+    if (otherHits.length === 1 || blocksOwner || otherTicket) {
       clearTitulo(stateDir, c.id);
       c.tituloN = '';
       updated++;

@@ -61,6 +61,34 @@ describe('matchAndSaveTitles issue #5', () => {
     expect(readTitulo(dir, 'jira').trim()).not.toMatch(/Codebase Memory/i);
   });
 
+  it('issue #10: prompt ticket 4220 suelta sticky AgentCrew y no lo reescribe', () => {
+    const prompt =
+      'Vamos a entrar en el ticket 4220, solo pide migrar la pantalla de Cobros';
+    writeEstado(dir, 'work', 'trabajando');
+    writeTitulo(dir, 'work', 'AgentCrew repository installation');
+    writePrompt(dir, 'work', prompt);
+    const tabs = ['AgentCrew repository installation', 'Ticket 4220 migration plan'];
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'work').trim()).toBe('Ticket 4220 migration plan');
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'work').trim()).toBe('Ticket 4220 migration plan');
+  });
+
+  it('issue #10: solo el tab malo en UI → clear y no re-asignar byTitulo', () => {
+    writeEstado(dir, 'work', 'trabajando');
+    writeTitulo(dir, 'work', 'AgentCrew repository installation');
+    writePrompt(
+      dir,
+      'work',
+      'Vamos a entrar en el ticket 4220, solo pide migrar la pantalla de Cobros',
+    );
+    const tabs = ['AgentCrew repository installation'];
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'work').trim()).toBe('');
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'work').trim()).toBe('');
+  });
+
   it('follow-up prompt no limpia sticky del mismo chat', () => {
     writeEstado(dir, 'side', 'trabajando');
     writeTitulo(dir, 'side', 'Sidebar footer consumption sync');
