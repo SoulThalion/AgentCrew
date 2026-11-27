@@ -57,7 +57,7 @@
 - [x] Sonar pregunta: respuesta+AskQuestion → un solo aviso (no doble voz)
 - [x] Issue #5: sticky/activo no pinta pin focused idle sin prompt↔título
 - [x] Issue #6: install-hooks quita `alarma-agente.ps1` (doble TTS)
-- [x] Pending approval voz: solo con card y sin proceso; auto-run no suena (#8/#13/#16)
+- [x] Pending approval voz: card de este comando, o sin shell tras ~4 s (Run en otra ventana). Auto-run en marcha no suena (#8/#12/#13/#16)
 - [x] RAM main: hover sin loadURL repetido; dock place solo ABN_POSCHANGED; tasklist filtrado
 - [x] Perf: scrape UIA PS persistente; poll 1.6s; scrape 6–13s; RAF solo poses animadas
 - [x] **Cast** (MP3 AgentCrew, Settings on/off + dispositivo) — `16-plan-cast.md` C0–C3
@@ -67,7 +67,7 @@
 - [x] Issue #4: watcher fail-open si `tasklist` flake (+ grace 10s + cache probe)
 - [x] Arranque: `panelRunning` exige electron/AgentCrew; `mostrar` reengancha dock tras Parar
 - [x] Issue #7: Cast `pickLanIp` NIC misma /24 + timeout play + skip mDNS si host + Settings IP anuncio
-- [x] Issue #8/#13/#16: voz de aprobación solo con card y sin proceso; auto-run no suena
+- [x] Issue #8/#12/#13/#16: voz si la card es de ese comando, o sin shell tras ~4 s. Auto-run en marcha no suena
 - [x] Issue #14: plan-build se ancla al tab Ticket, no al focused ajeno
 - [x] Issue #15: un chat ajeno no quita el sticky del tab focused
 - [x] Issue #9: sticky contaminado solo si prompt → otro tab UI; fuzzy sin prosa; follow-up no limpia

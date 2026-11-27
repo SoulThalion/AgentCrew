@@ -1,47 +1,76 @@
 import { describe, expect, it } from 'vitest';
 import {
+  approvalNeedle,
   approvalSonarDecision,
   commandSnippet,
   matchCommandRunning,
+  needlesInApprovalCard,
+  parseApprovalCardDump,
   readShellCommand,
+  SHELL_APPROVAL_BACKGROUND_MS,
   userShellStarted,
 } from '../src/electron/approvalConfirm.js';
 
+const CMD = 'npm test -w @agentcrew/panel';
+
 describe('approval sonar issue #12', () => {
-  it('card visible y sin proceso → sonar (#8/#16)', () => {
+  it('card de este comando y sin proceso → sonar (#8/#16)', () => {
     expect(
-      approvalSonarDecision({ ageMs: 8000, uiVisible: true, commandRunning: false }),
+      approvalSonarDecision({ ageMs: 8000, cardForPending: true, commandRunning: false }),
     ).toBe('speak');
   });
 
-  it('card visible pero el comando ya corre → silencio (#16)', () => {
+  it('card de este comando pero ya corre → silencio (#16)', () => {
     expect(
-      approvalSonarDecision({ ageMs: 8000, uiVisible: true, commandRunning: true }),
+      approvalSonarDecision({ ageMs: 8000, cardForPending: true, commandRunning: true }),
     ).toBe('suppress');
+  });
+
+  it('Run/Skip ajeno no es la card de este comando (#16)', () => {
+    const names = ['Run', 'Skip', 'otro comando que no es el pendiente'];
+    expect(needlesInApprovalCard(names, [CMD])).toEqual([]);
+    expect(
+      approvalSonarDecision({ ageMs: 2000, cardForPending: false, commandRunning: false }),
+    ).toBe('wait');
+  });
+
+  it('sin card y sin shell, tras la espera → sonar (#12)', () => {
+    expect(
+      approvalSonarDecision({
+        ageMs: SHELL_APPROVAL_BACKGROUND_MS,
+        cardForPending: false,
+        commandRunning: false,
+      }),
+    ).toBe('speak');
+  });
+
+  it('misma ventana: Run, Skip y el comando → esa card', () => {
+    const names = ['Run', 'Skip', CMD];
+    expect(needlesInApprovalCard(names, [CMD])).toEqual([approvalNeedle(CMD)]);
   });
 
   it('auto-run con proceso → no sonar (#8)', () => {
     expect(
-      approvalSonarDecision({ ageMs: 8000, uiVisible: false, commandRunning: true }),
+      approvalSonarDecision({ ageMs: 8000, cardForPending: false, commandRunning: true }),
     ).toBe('suppress');
-  });
-
-  it('sin card, comando ya terminado → nunca sonar (#16)', () => {
-    expect(
-      approvalSonarDecision({ ageMs: 8000, uiVisible: false, commandRunning: false }),
-    ).toBe('wait');
   });
 
   it('sin card todavía dentro de la espera → esperar', () => {
     expect(
-      approvalSonarDecision({ ageMs: 2000, uiVisible: false, commandRunning: false }),
+      approvalSonarDecision({ ageMs: 2000, cardForPending: false, commandRunning: false }),
     ).toBe('wait');
   });
 
   it('sin comando para comparar → no adivinar', () => {
     expect(
-      approvalSonarDecision({ ageMs: 9000, uiVisible: false, commandRunning: null }),
+      approvalSonarDecision({ ageMs: 9000, cardForPending: false, commandRunning: null }),
     ).toBe('wait');
+  });
+
+  it('dump UIA: solo la ventana con Run y Skip', () => {
+    const groups = parseApprovalCardDump('##\nRun\nSkip\nnpm test -w @agentcrew/panel\n');
+    expect(groups).toEqual([['Run', 'Skip', CMD]]);
+    expect(parseApprovalCardDump('0')).toEqual([]);
   });
 
   it('proceso anterior al shell no cuenta', () => {

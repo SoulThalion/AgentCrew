@@ -31,12 +31,13 @@ import {
 } from './settingsStore';
 import { listPrivateLanIps, pickLanIp } from '@agentcrew/cast';
 import { listCastDevices, playMp3OnChosenCast, stopCastHttp } from './castRuntime';
-import { cursorShowsShellApprovalUi } from './shellApprovalUi';
+import { approvalCardWindows } from './shellApprovalUi';
 import {
   approvalSonarDecision,
   commandSnippet,
   listRecentProcessCommandLines,
   matchCommandRunning,
+  needlesInApprovalCard,
   readShellCommand,
   SHELL_APPROVAL_GRACE_MS,
 } from './approvalConfirm';
@@ -554,7 +555,7 @@ function confirmPendingErrors(): void {
 }
 
 /** shell-antes marca aprobación; auto-run limpia en afterShell.
- * Card UIA (#8) o, si el chat no está focused, ausencia de proceso (#12). */
+ * Sonar si la card muestra este comando (#8) o, sin shell, tras la espera (#12). */
 let approvalConfirmBusy = false;
 
 async function confirmPendingApprovals(): Promise<void> {
@@ -601,8 +602,8 @@ async function confirmPendingApprovals(): Promise<void> {
 
   approvalConfirmBusy = true;
   try {
-    const ui =
-      process.platform === 'win32' ? await cursorShowsShellApprovalUi() : true;
+    const cards =
+      process.platform === 'win32' ? await approvalCardWindows() : [];
     const needProcs =
       process.platform === 'win32' &&
       candidates.some((c) => commandSnippet(c.command).length > 0);
@@ -614,9 +615,12 @@ async function confirmPendingApprovals(): Promise<void> {
       if (!fs.existsSync(path.join(dir, `shell-${c.id}.txt`))) continue;
       const running =
         procs === null ? null : matchCommandRunning(c.command, procs, c.at);
+      const cardForPending =
+        process.platform !== 'win32' ||
+        cards.some((names) => needlesInApprovalCard(names, [c.command]).length > 0);
       const decision = approvalSonarDecision({
         ageMs: t - c.at,
-        uiVisible: ui,
+        cardForPending,
         commandRunning: running,
       });
       if (decision === 'wait') continue;

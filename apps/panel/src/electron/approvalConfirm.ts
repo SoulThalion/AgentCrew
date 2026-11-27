@@ -1,22 +1,76 @@
 /**
- * #8: card visible y sin proceso → sonar.
- * #13: powershell/cmd nuevo → silencio, aunque la card salga en otra ventana.
- * #16: sin card no hay sonar por espera; el auto-run corto ya terminado tampoco.
+ * #8: card Run+Skip de este comando, sin proceso → sonar ya.
+ * #12: otra ventana esperando Run no está en UIA. Si no arrancó shell, tras la espera → sonar.
+ * #13: powershell/cmd nuevo → silencio, aunque otra ventana tenga Run/Skip.
+ * #16: Run/Skip de otra ventana, sin este comando, no suena al momento.
  */
 import { execFile } from 'node:child_process';
 
 export const SHELL_APPROVAL_GRACE_MS = 1500;
+export const SHELL_APPROVAL_BACKGROUND_MS = 4000;
 
 export type ApprovalSonar = 'speak' | 'wait' | 'suppress';
 
 export function approvalSonarDecision(opts: {
   ageMs: number;
-  uiVisible: boolean;
+  cardForPending: boolean;
   commandRunning: boolean | null;
 }): ApprovalSonar {
   if (opts.commandRunning === true) return 'suppress';
-  if (opts.uiVisible) return 'speak';
+  if (opts.cardForPending) return 'speak';
+  if (opts.commandRunning === false && opts.ageMs >= SHELL_APPROVAL_BACKGROUND_MS) {
+    return 'speak';
+  }
   return 'wait';
+}
+
+/** Trozo del comando que tiene que verse en la misma ventana que Run y Skip. */
+export function approvalNeedle(command: string): string {
+  return commandSnippet(command).slice(0, 24);
+}
+
+function isRunButton(name: string): boolean {
+  return name === 'Run' || name.startsWith('Run ');
+}
+
+function isSkipButton(name: string): boolean {
+  return (
+    name === 'Skip' ||
+    name === 'Reject' ||
+    name === 'Deny' ||
+    name.startsWith('Add to allowlist')
+  );
+}
+
+/** Nombres UIA de una sola ventana. Vacío si no hay card de esos comandos. */
+export function needlesInApprovalCard(names: string[], commands: string[]): string[] {
+  const clean = names.map((n) => n.trim()).filter(Boolean);
+  if (!clean.some(isRunButton) || !clean.some(isSkipButton)) return [];
+  const blob = clean.map((n) => n.toLowerCase().replace(/\s+/g, ' ')).join('\n');
+  const hits: string[] = [];
+  for (const command of commands) {
+    const needle = approvalNeedle(command);
+    if (needle && blob.includes(needle)) hits.push(needle);
+  }
+  return hits;
+}
+
+/** Varias ventanas separadas por una línea `##`. `0` = ninguna card. */
+export function parseApprovalCardDump(stdout: string): string[][] {
+  const raw = stdout.trim();
+  if (!raw || raw === '0') return [];
+  const groups: string[][] = [];
+  let cur: string[] | null = null;
+  for (const line of raw.split(/\r?\n/)) {
+    if (line.trim() === '##') {
+      if (cur && cur.length) groups.push(cur);
+      cur = [];
+      continue;
+    }
+    if (cur && line.trim()) cur.push(line.trim());
+  }
+  if (cur && cur.length) groups.push(cur);
+  return groups;
 }
 
 const PROBE_SHELL = /get-ciminstance|uiautomation|automationelement/;

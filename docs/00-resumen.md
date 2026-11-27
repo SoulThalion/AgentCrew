@@ -24,20 +24,21 @@ Dos ejes que ya se pisaron. Al arreglar uno, los tests del mismo eje siguen en v
 | 5 | Chat nuevo sin match de prompt no escribe título en el pin focused idle | `learnTitles` «foco idle»; `composeChats` «issue #5» |
 | 6 | `install-hooks` quita `alarma-agente.ps1` | `install-hooks-legacy.test.mjs` |
 | 7 | Cast elige NIC en la misma /24 que el dispositivo | `lanIp` «issue #7» |
-| 8 | Card Run visible y sin proceso → sonar. Auto-run con proceso → silencio. Smart suena en el hook | `approvalConfirm` «auto-run»; hooks «aprobacion smart» |
+| 8 | Card Run+Skip con el texto de este comando, y sin proceso → sonar. Auto-run con proceso → silencio. Smart suena en el hook | `approvalConfirm` «card de este comando»; hooks «aprobacion smart» |
 | 9 | Prosa larga que solo menciona un título no hace fuzzy. Follow-up corto no suelta el sticky | `composeChats` «prosa larga»; `learnTitles` «follow-up» |
 | 10 | «ticket/jira» + id ≥3 matchea ese tab y suelta el sticky de otro | `composeChats` / `learnTitles` «issue #10» |
 | 11 | «Implement the plan…» se queda en el Ticket focused. Si el ocupante solo menciona el ticket, el plan lo toma. Un solo tab + activo sin título → ese activo | `composeChats` / `learnTitles` «issue #11» |
-| 12 | `?` dentro de una URL no es pregunta. Sin card no hay voz por timeout (#16) | hooks «? en URL» |
+| 12 | `?` dentro de una URL no es pregunta. Sin card y sin shell de usuario, tras ~4 s → sonar (Run en otra ventana) | hooks «? en URL»; `approvalConfirm` «tras la espera» |
 | 13 | PowerShell/cmd/bash nuevo → silencio, también si UIA ve Run en otra ventana. La sonda WMI/UIA del panel no cuenta | `approvalConfirm` «powershell nuevo»; «sonda WMI» |
 | 14 | El plan-build va al único tab Ticket. El focused que no es ese Ticket se queda con su chat | `composeChats` / `learnTitles` «issue #14» |
 | 15 | Quien ya tiene el sticky del tab focused no lo pierde ante un chat ajeno, salvo plan-build en tab Ticket o prompt que sí matchea | `composeChats` / `learnTitles` «issue #15» |
-| 16 | Sin card no hay sonar. Card visible y sin proceso → sonar. Card + comando en marcha → silencio | `approvalConfirm` «sin card»; «card visible y sin proceso» |
+| 16 | Run/Skip de otra ventana no suena al momento. Card de este comando sin proceso → sonar. Con proceso → silencio. Sin shell, tras la espera, sí suena (#12) | `approvalConfirm` «Run/Skip ajeno»; «card de este comando»; «tras la espera» |
 
 Tensiones ya aceptadas:
 
-- **#12 y #16.** Sin card no hay voz por espera. Una aprobación en un chat no visible solo suena si UIA ve la card.
-- **#13 y #16.** Con proceso no suena aunque UIA vea Run/Skip en otra ventana.
+- **#12 y #16.** Run/Skip ajeno no dispara al momento. Si a los ~4 s no arrancó shell, sí suena: es el Run de una ventana que UIA no muestra.
+- **#8 y #16.** La card con el texto de este comando suena ya. Un Run/Skip sin ese texto no cuenta como esa card.
+- **#13 y #16.** Con proceso no suena aunque esa card sea la del comando.
 - **#11 y #14.** El plan solo se fuerza al focused si ese título es tab Ticket. Si el focused es otro chat, el plan pasa al Ticket.
 - **#5 y #14.** El chat que recupera el focused solo se ata si el plan acaba de salir de ese tab. Un pin idle vacío no recibe un chat nuevo.
 

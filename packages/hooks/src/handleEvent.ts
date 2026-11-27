@@ -196,8 +196,8 @@ export function handleEvent(
 
       case 'shell-antes': {
         // beforeShellExecution: auto-run Y Pending approval (card Run).
-        // Guarda el comando. Panel sonar: card UIA (#8) o, si el chat no
-        // está focused, cuando ese comando no tiene proceso (#12).
+        // Guarda el comando. Panel sonar: card de este comando (#8) o, si
+        // otra ventana espera Run y no hay shell, tras la espera (#12).
         if (id && isTrackedChat(stateDir, id)) {
           markShell(stateDir, id, new Date(), field(raw, 'command'));
           if (!fs.existsSync(fileAprobacion(stateDir, id))) {
