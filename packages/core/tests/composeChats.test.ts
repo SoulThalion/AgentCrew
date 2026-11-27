@@ -261,14 +261,10 @@ describe('composeChats', () => {
     expect(list.filter((a) => a.id.startsWith('ui:'))).toHaveLength(0);
   });
 
-  it('issue #9: activo sticky Memory + prompt Jira-like → no pinta en Memory', () => {
+  it('issue #9: sticky Memory + prompt que matchea tab Jira → no pinta en Memory', () => {
     writeEstado(dir, 'jira', 'subagentes');
     writeTitulo(dir, 'jira', 'Codebase Memory MCP usage, anclado');
-    writePrompt(
-      dir,
-      'jira',
-      'Vuelve a revisar y no dejes comentarios a no ser que sean necesarios',
-    );
+    writePrompt(dir, 'jira', 'Jira ticket 4216 review follow-up');
     writeEstado(dir, 'mem', 'terminado');
     writeTitulo(dir, 'mem', 'Codebase Memory MCP usage');
     clearRun(dir, 'mem');
@@ -280,8 +276,30 @@ describe('composeChats', () => {
       focusedTitles: ['Codebase Memory MCP usage, anclado'],
     });
     const mem = list.find((a) => a.title.includes('Codebase Memory'));
+    const jira = list.find((a) => a.title.includes('Jira'));
     expect(mem?.id).not.toBe('jira');
-    expect(mem?.state).not.toBe('subagentes');
+    expect(jira?.id).toBe('jira');
+  });
+
+  it('follow-up prompt distinto al título → mantiene sticky (no huérfano extra)', () => {
+    writeEstado(dir, 'side', 'trabajando');
+    writeTitulo(dir, 'side', 'Sidebar footer consumption sync');
+    writePrompt(
+      dir,
+      'side',
+      'revisa que le pasa a los agentes de la barra, hay agentes por mis comentarios',
+    );
+    const list = composeChats(dir, {
+      uiTitles: [
+        'Sidebar footer consumption sync',
+        'MiraiWay phase 4',
+      ],
+      focusedTitles: ['Sidebar footer consumption sync'],
+    });
+    const side = list.find((a) => a.title.includes('Sidebar'));
+    expect(side?.id).toBe('side');
+    expect(side?.state).toBe('trabajando');
+    expect(list.filter((a) => a.id === 'side')).toHaveLength(1);
   });
 
   it('issue #9: prosa que cita Jira no bind a tab Jira', () => {

@@ -348,20 +348,24 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     'subagentes',
   ]);
 
-  // Pre-pass: sticky contaminado → limpiar (#5 exacto otro tab; #9 stale activo)
+  // Pre-pass: sticky contaminado solo si prompt apunta a OTRO tab UI.
+  // Follow-up («ok», «revisa X») NO limpia sticky del mismo chat (regresión #9).
   for (const c of cands) {
-    if (!c.tituloN || !uiNormSet.has(c.tituloN)) continue;
-    if (c.promptN && uiNormSet.has(c.promptN) && c.promptN !== c.tituloN) {
+    if (!c.tituloN || !uiNormSet.has(c.tituloN) || !c.promptN) continue;
+    if (c.promptN === c.tituloN) continue;
+    if (uiNormSet.has(c.promptN) && c.promptN !== c.tituloN) {
       clearTitulo(stateDir, c.id);
       c.tituloN = '';
       updated++;
       continue;
     }
     const ag = agents.find((x) => x.id === c.id);
-    if (!ag || !ACTIVE.has(String(ag.state)) || !c.promptN) continue;
-    if (c.promptN === c.tituloN) continue;
-    const uiTitle = uiTitles.find((t) => norm(t) === c.tituloN);
-    if (uiTitle && !fuzzyTitleMatch(c.promptN, uiTitle)) {
+    if (!ag || !ACTIVE.has(String(ag.state))) continue;
+    const otherHits = uiTitles.filter((t) => {
+      const n = norm(t);
+      return n !== c.tituloN && fuzzyTitleMatch(c.promptN, t);
+    });
+    if (otherHits.length === 1) {
       clearTitulo(stateDir, c.id);
       c.tituloN = '';
       updated++;

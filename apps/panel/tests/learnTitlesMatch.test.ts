@@ -50,18 +50,29 @@ describe('matchAndSaveTitles issue #5', () => {
     expect(readTitulo(dir, 'b').trim()).not.toBe('Free other tab');
   });
 
-  it('issue #9: activo sticky Memory + prompt sin match → clear sticky', () => {
+  it('issue #9: sticky Memory + prompt que matchea Jira → clear sticky', () => {
     writeEstado(dir, 'jira', 'subagentes');
     writeTitulo(dir, 'jira', 'Codebase Memory MCP usage, anclado');
-    writePrompt(
-      dir,
-      'jira',
-      'Vuelve a revisar y no dejes comentarios a no ser que sean necesarios',
-    );
+    writePrompt(dir, 'jira', 'Jira ticket 4216 review follow-up');
     matchAndSaveTitles(dir, [
       'Codebase Memory MCP usage, anclado',
       'Jira ticket 4216 review',
     ]);
     expect(readTitulo(dir, 'jira').trim()).not.toMatch(/Codebase Memory/i);
+  });
+
+  it('follow-up prompt no limpia sticky del mismo chat', () => {
+    writeEstado(dir, 'side', 'trabajando');
+    writeTitulo(dir, 'side', 'Sidebar footer consumption sync');
+    writePrompt(
+      dir,
+      'side',
+      'revisa que le pasa a los agentes de la barra',
+    );
+    matchAndSaveTitles(dir, [
+      'Sidebar footer consumption sync',
+      'MiraiWay phase 4',
+    ]);
+    expect(readTitulo(dir, 'side').trim()).toBe('Sidebar footer consumption sync');
   });
 });

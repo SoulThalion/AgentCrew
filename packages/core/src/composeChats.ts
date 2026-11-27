@@ -217,13 +217,18 @@ export function composeChats(
       }
       const tit = normalizeTitle(readTitulo(stateDir, a.id));
       if (tit && tit === clave) {
-        // #9: sticky stale — activo cuyo prompt ya no matchea este tab
-        if (
-          ACTIVE.has(String(a.state)) &&
-          prompt &&
-          !fuzzyTitleMatch(prompt, title)
-        ) {
-          // no byTitulo; puede fuzzy a otro UI
+        // Sticky de este tab: keep salvo prompt que matchea OTRO tab UI abierto
+        // (follow-ups no matchean título → no desalojar; regresión #9).
+        if (ACTIVE.has(String(a.state)) && prompt) {
+          const otherUi = [...clavesUi].some(
+            (o) => o !== clave && fuzzyTitleMatch(prompt, o),
+          );
+          if (otherUi && !fuzzyTitleMatch(prompt, title)) {
+            // contaminado hacia otro tab → no byTitulo aquí
+          } else {
+            byTitulo.push(a);
+            continue;
+          }
         } else {
           byTitulo.push(a);
           continue;
