@@ -89,6 +89,35 @@ describe('matchAndSaveTitles issue #5', () => {
     expect(readTitulo(dir, 'work').trim()).toBe('');
   });
 
+  it('issue #11: focused AgentCrew + activo sin titulo toma ese tab', () => {
+    writeEstado(dir, 'here', 'trabajando');
+    writePrompt(dir, 'here', 'y además cuando se inicia el trabajo en este chat');
+    matchAndSaveTitles(dir, ['*AgentCrew repository installation']);
+    expect(readTitulo(dir, 'here').trim()).toBe('AgentCrew repository installation');
+  });
+
+  it('issue #11: Implement the plan en sticky AgentCrew pasa al tab focused', () => {
+    const prompt = 'Implement the plan as specified, it is attached for your reference';
+    writeEstado(dir, 'ticket', 'planificando');
+    writeTitulo(dir, 'ticket', 'AgentCrew repository installation');
+    writePrompt(dir, 'ticket', prompt);
+    const tabs = ['AgentCrew repository installation', '*Ticket 4220 migration plan'];
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'ticket').trim()).toBe('Ticket 4220 migration plan');
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'ticket').trim()).toBe('Ticket 4220 migration plan');
+  });
+
+  it('issue #11: Implement the plan no suelta el sticky del tab focused', () => {
+    const prompt = 'Implement the plan as specified, it is attached for your reference';
+    writeEstado(dir, 'ticket', 'planificando');
+    writeTitulo(dir, 'ticket', 'Ticket 4220 migration plan');
+    writePrompt(dir, 'ticket', prompt);
+    const tabs = ['*Ticket 4220 migration plan', 'AgentCrew repository installation'];
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'ticket').trim()).toBe('Ticket 4220 migration plan');
+  });
+
   it('follow-up prompt no limpia sticky del mismo chat', () => {
     writeEstado(dir, 'side', 'trabajando');
     writeTitulo(dir, 'side', 'Sidebar footer consumption sync');

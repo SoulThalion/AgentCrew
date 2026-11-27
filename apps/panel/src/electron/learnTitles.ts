@@ -17,6 +17,8 @@ import {
   resolveFocusedIds,
   fuzzyTitleMatch,
   promptNamesOtherTicket,
+  isPlanBoilerplate,
+  isShortFollowUp,
 } from '@agentcrew/core';
 
 let busy = false;
@@ -362,7 +364,8 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     }
     const ag = agents.find((x) => x.id === c.id);
     if (!ag || !ACTIVE.has(String(ag.state))) continue;
-    const matchesOwn = fuzzyTitleMatch(c.promptN, c.tituloN);
+    const matchesOwn =
+      c.promptN === c.tituloN || fuzzyTitleMatch(c.promptN, c.tituloN);
     const otherHits = uiTitles.filter((t) => {
       const n = norm(t);
       return n !== c.tituloN && fuzzyTitleMatch(c.promptN, t);
@@ -373,7 +376,23 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
         (o) => o.id !== c.id && !!o.promptN && fuzzyTitleMatch(o.promptN, c.tituloN),
       );
     const otherTicket = !matchesOwn && promptNamesOtherTicket(c.promptN, c.tituloN);
-    if (otherHits.length === 1 || blocksOwner || otherTicket) {
+    const focusN = focused.length === 1 ? norm(focused[0]!) : '';
+    const boilerplate = isPlanBoilerplate(c.promptN);
+    // Boilerplate en el tab focused se queda (#11). En otro tab, se suelta.
+    const keepBoilerplate = boilerplate && (!focusN || c.tituloN === focusN);
+    const keepFocus =
+      !!focusN &&
+      c.tituloN === focusN &&
+      otherHits.length === 0 &&
+      !otherTicket &&
+      !blocksOwner;
+    const shortFu = isShortFollowUp(c.promptN, c.tituloN);
+    if (
+      otherHits.length === 1 ||
+      blocksOwner ||
+      otherTicket ||
+      (!matchesOwn && !shortFu && !keepBoilerplate && !keepFocus)
+    ) {
       clearTitulo(stateDir, c.id);
       c.tituloN = '';
       updated++;
@@ -392,7 +411,7 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     const prev = readTitulo(stateDir, id).trim();
     const prevN = norm(prev);
     const titleN = norm(title);
-    if (prev && prevN !== titleN && uiNormSet.has(prevN)) {
+    if (!opts?.force && prev && prevN !== titleN && uiNormSet.has(prevN)) {
       return false;
     }
     const me = cands.find((c) => c.id === id);
@@ -458,6 +477,49 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     });
     if (byPrefix.length === 1) {
       assign(byPrefix[0]!.id, title);
+    }
+  }
+
+  // #11: el activo del chat focused reclama ese tab (force).
+  if (focused.length === 1) {
+    const focusTitle = focused[0]!;
+    const focusN = norm(focusTitle);
+    const holder = cands.find((c) => c.tituloN === focusN);
+    const holderOk =
+      !!holder &&
+      (holder.promptN === focusN ||
+        fuzzyTitleMatch(holder.promptN, focusTitle) ||
+        (isPlanBoilerplate(holder.promptN) && holder.tituloN === focusN));
+    const needy = cands.filter((c) => {
+      const ag = agents.find((x) => x.id === c.id);
+      if (!ag || !ACTIVE.has(String(ag.state))) return false;
+      if (holderOk && c.id === holder?.id) return false;
+      const ownsOther =
+        c.tituloN &&
+        c.tituloN !== focusN &&
+        uiNormSet.has(c.tituloN) &&
+        (c.promptN === c.tituloN || fuzzyTitleMatch(c.promptN, c.tituloN));
+      if (ownsOther) return false;
+      const ownsFocus =
+        c.tituloN === focusN &&
+        (c.promptN === focusN ||
+          fuzzyTitleMatch(c.promptN, focusTitle) ||
+          isPlanBoilerplate(c.promptN));
+      return !ownsFocus;
+    });
+    const untitled = needy.filter((c) => c.tituloN !== focusN);
+    const pick = untitled.length === 1 ? untitled[0] : needy.length === 1 ? needy[0] : null;
+    const allow =
+      !!pick &&
+      !holderOk &&
+      (!!holder || isPlanBoilerplate(pick.promptN) || uiTitles.length === 1);
+    if (allow && pick) {
+      if (holder && holder.id !== pick.id) {
+        clearTitulo(stateDir, holder.id);
+        holder.tituloN = '';
+        updated++;
+      }
+      assign(pick.id, focusTitle, { force: true });
     }
   }
 

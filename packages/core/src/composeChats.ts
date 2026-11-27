@@ -101,6 +101,24 @@ export function promptNamesOtherTicket(prompt: string, title: string): boolean {
   return digs.some((d) => !b.has(d));
 }
 
+/** Cursor al pulsar Build del plan. No identifica el tab. */
+export function isPlanBoilerplate(text: string): boolean {
+  return normalizeTitle(text).startsWith('implement the plan');
+}
+
+/**
+ * Follow-up corto del mismo chat (#9). No incluye el boilerplate del plan
+ * ni un prompt que nombra otro ticket.
+ */
+export function isShortFollowUp(prompt: string, title: string): boolean {
+  if (isPlanBoilerplate(prompt)) return false;
+  if (promptNamesOtherTicket(prompt, title)) return false;
+  const toks = normalizeTitle(prompt)
+    .split(/\s+/)
+    .filter((t) => t.length >= 2);
+  return toks.length > 0 && toks.length <= 12;
+}
+
 function readPromptNorm(stateDir: string, id: string): string {
   const raw = (readText(filePrompt(stateDir, id)) ?? '').trim();
   return normalizeTitle(raw.replace(/\\[nrt]/gi, ' ').replace(/\s+/g, ' '));
@@ -269,6 +287,72 @@ export function composeChats(
       consumeInactiveSiblings(clave);
     } else {
       unmatchedIdx.push(i);
+    }
+  }
+
+  // #11: un activo sin tab propio reclama el focused si el ocupante no sostiene
+  // el título, si el prompt es el boilerplate del plan, o si solo hay ese tab.
+  // #5: chat nuevo con tarea real no pisa un pin focused vacío entre varios tabs.
+  if (focusedNorm.size === 1) {
+    const focusClave = [...focusedNorm][0]!;
+    const focusIdx = uiTitles.findIndex((t) => normalizeTitle(t) === focusClave);
+    if (focusIdx >= 0) {
+      const holder = assigned.get(focusIdx);
+      const holderPrompt = holder ? readPromptNorm(stateDir, holder.id) : '';
+      const holderSticky = holder ? normalizeTitle(readTitulo(stateDir, holder.id)) : '';
+      const holderOk =
+        !!holder &&
+        (holderPrompt === focusClave ||
+          fuzzyTitleMatch(holderPrompt, uiTitles[focusIdx]!) ||
+          (isPlanBoilerplate(holderPrompt) && holderSticky === focusClave));
+      const needy = rawAgents.filter((a) => {
+        if (!ACTIVE.has(String(a.state))) return false;
+        if (holderOk && a.id === holder?.id) return false;
+        const prompt = readPromptNorm(stateDir, a.id);
+        const assignedIdx = [...assigned.entries()].find(([, ag]) => ag.id === a.id)?.[0];
+        if (assignedIdx !== undefined && assignedIdx !== focusIdx) {
+          const assignedTitle = uiTitles[assignedIdx]!;
+          const claveAsig = normalizeTitle(assignedTitle);
+          const stuckWrong =
+            prompt !== claveAsig && !fuzzyTitleMatch(prompt, assignedTitle);
+          if (!stuckWrong) return false;
+        }
+        const tit = normalizeTitle(readTitulo(stateDir, a.id));
+        const ownsOther =
+          tit &&
+          tit !== focusClave &&
+          clavesUi.has(tit) &&
+          (prompt === tit || fuzzyTitleMatch(prompt, tit));
+        if (ownsOther) return false;
+        const ownsFocus =
+          tit === focusClave &&
+          (prompt === focusClave ||
+            fuzzyTitleMatch(prompt, uiTitles[focusIdx]!) ||
+            isPlanBoilerplate(prompt));
+        return !ownsFocus;
+      });
+      const untitled = needy.filter(
+        (a) => normalizeTitle(readTitulo(stateDir, a.id)) !== focusClave,
+      );
+      const pick =
+        untitled.length === 1 ? untitled[0] : needy.length === 1 ? needy[0] : null;
+      const prompt = pick ? readPromptNorm(stateDir, pick.id) : '';
+      const allow =
+        !!pick &&
+        (!holderOk &&
+          (!!holder ||
+            isPlanBoilerplate(prompt) ||
+            uiTitles.length === 1));
+      if (allow && pick) {
+        if (holder && holder.id !== pick.id) used.delete(holder.id);
+        for (const [idx, agent] of assigned) {
+          if (agent.id === pick.id && idx !== focusIdx) assigned.delete(idx);
+        }
+        used.add(pick.id);
+        assigned.set(focusIdx, pick);
+        const drop = unmatchedIdx.indexOf(focusIdx);
+        if (drop >= 0) unmatchedIdx.splice(drop, 1);
+      }
     }
   }
 

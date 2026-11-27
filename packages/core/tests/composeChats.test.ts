@@ -288,6 +288,51 @@ describe('composeChats', () => {
     expect(jira?.id).toBe('jira');
   });
 
+  it('issue #11: focused único + activo sin titulo → un solo slot', () => {
+    writeEstado(dir, 'here', 'trabajando');
+    writePrompt(dir, 'here', 'y además cuando se inicia el trabajo en este chat');
+    const list = composeChats(dir, {
+      uiTitles: ['AgentCrew repository installation'],
+      focusedTitles: ['AgentCrew repository installation'],
+    });
+    expect(list.filter((a) => a.id === 'here')).toHaveLength(1);
+    expect(list.find((a) => a.title.includes('AgentCrew'))?.id).toBe('here');
+    expect(list.some((a) => a.id?.startsWith('ui:'))).toBe(false);
+  });
+
+  it('issue #11: boilerplate en sticky ajeno vuelve al tab focused', () => {
+    writeEstado(dir, 'ticket', 'planificando');
+    writeTitulo(dir, 'ticket', 'AgentCrew repository installation');
+    writePrompt(
+      dir,
+      'ticket',
+      'Implement the plan as specified, it is attached for your reference',
+    );
+    const list = composeChats(dir, {
+      uiTitles: ['AgentCrew repository installation', 'Ticket 4220 migration plan'],
+      focusedTitles: ['Ticket 4220 migration plan'],
+    });
+    const tab = list.find((a) => a.title.includes('Ticket 4220'));
+    expect(tab?.id).toBe('ticket');
+    expect(list.filter((a) => a.id === 'ticket')).toHaveLength(1);
+  });
+
+  it('issue #11: boilerplate conserva el sticky del tab focused', () => {
+    writeEstado(dir, 'ticket', 'planificando');
+    writeTitulo(dir, 'ticket', 'Ticket 4220 migration plan');
+    writePrompt(
+      dir,
+      'ticket',
+      'Implement the plan as specified, it is attached for your reference',
+    );
+    const list = composeChats(dir, {
+      uiTitles: ['Ticket 4220 migration plan', 'AgentCrew repository installation'],
+      focusedTitles: ['Ticket 4220 migration plan'],
+    });
+    expect(list.find((a) => a.title.includes('Ticket 4220'))?.id).toBe('ticket');
+    expect(list.filter((a) => a.id === 'ticket')).toHaveLength(1);
+  });
+
   it('follow-up prompt distinto al título → mantiene sticky (no huérfano extra)', () => {
     writeEstado(dir, 'side', 'trabajando');
     writeTitulo(dir, 'side', 'Sidebar footer consumption sync');
