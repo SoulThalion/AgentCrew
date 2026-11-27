@@ -9,7 +9,8 @@ Al corregir un bug o un issue de GitHub, el arreglo nuevo convive con los que ya
 
 ## Pasos
 
-1. Abre [docs/17-regresiones-issues.md](../../docs/17-regresiones-issues.md). Marca el eje del cambio (sticky/foco, voz aprobación, u otra fila).
-2. El fix lleva un test con el número de issue.
-3. Corre los tests de las filas de ese eje. Hecho = esos tests en verde, más el test nuevo.
-4. Si el comportamiento de una fila vecina cambia, actualiza esa fila y su test en el mismo cambio.
+1. Lee [docs/00-resumen.md](../../docs/00-resumen.md), sección Issues. Marca el eje (sticky/foco, voz aprobación, u otra fila).
+2. No abras `estado.md`, `11-contexto-agentes.md`, `17-regresiones-issues.md`, el issue en GitHub ni el test antiguo. Ábrelos solo si una fila del resumen no basta para el caso.
+3. El fix lleva un test con el número de issue.
+4. Corre los tests de las filas de ese eje. Hecho = esos tests en verde, más el test nuevo.
+5. Si el comportamiento de una fila cambia, reescribe esa fila en `docs/00-resumen.md` y su test en el mismo cambio.

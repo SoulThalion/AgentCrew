@@ -134,6 +134,24 @@ describe('matchAndSaveTitles issue #5', () => {
     expect(readTitulo(dir, 'plan').trim()).toBe('Ticket 4220 migration plan');
   });
 
+  it('issue #15: activo ajeno no quita el sticky del Ticket focused', () => {
+    writeEstado(dir, 'ticket', 'trabajando');
+    writeTitulo(dir, 'ticket', 'Ticket 4220 migration plan');
+    writePrompt(dir, 'ticket', 'Build Error Failed to compile the migration screen');
+    writeEstado(dir, 'here', 'esperando');
+    writePrompt(dir, 'here', 'AgentCrew repository installation sigue con el sprite cruzado');
+    const tabs = [
+      'Codebase Memory MCP usage, anclado',
+      'AgentCrew repository installation',
+      '*Ticket 4220 migration plan',
+    ];
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'ticket').trim()).toBe('Ticket 4220 migration plan');
+    expect(readTitulo(dir, 'here').trim()).not.toBe('Ticket 4220 migration plan');
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'ticket').trim()).toBe('Ticket 4220 migration plan');
+  });
+
   it('issue #14: plan-build pasa al Ticket y el focused ajeno se queda con su chat', () => {
     writeEstado(dir, 'here', 'esperando');
     writePrompt(dir, 'here', 'AgentCrew repository installation sigue con sprites cruzados');

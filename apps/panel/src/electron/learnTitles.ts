@@ -539,15 +539,21 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
     });
     const untitled = needy.filter((c) => c.tituloN !== focusN);
     let pick = untitled.length === 1 ? untitled[0] : needy.length === 1 ? needy[0] : null;
+    const pickPrompt = pick?.promptN ?? '';
     const focusIsTicket = isTicketTab(focusTitle);
     const boilerplateClaims =
-      !!pick &&
-      isPlanBoilerplate(pick.promptN) &&
+      isPlanBoilerplate(pickPrompt) &&
       (focusIsTicket || !uiTitles.some((t) => isTicketTab(t)));
-    let allow =
-      !!pick &&
-      !holderOk &&
-      (!!holder || boilerplateClaims || uiTitles.length === 1);
+    const pickMatches =
+      pickPrompt === focusN ||
+      (!!pickPrompt && fuzzyTitleMatch(pickPrompt, focusTitle)) ||
+      (isPlanBoilerplate(pickPrompt) && focusIsTicket);
+    const holderStickyHere = !!holder && holder.tituloN === focusN;
+    let allow = false;
+    if (pick && !holderOk && pick.id !== holder?.id) {
+      if (holderStickyHere) allow = pickMatches;
+      else allow = pickMatches || boilerplateClaims || uiTitles.length === 1;
+    }
     const planBuilds = cands.filter((c) => {
       const ag = agents.find((x) => x.id === c.id);
       if (!ag || !ACTIVE.has(String(ag.state))) return false;

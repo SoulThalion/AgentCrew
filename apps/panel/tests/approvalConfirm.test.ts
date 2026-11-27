@@ -5,14 +5,19 @@ import {
   matchCommandRunning,
   readShellCommand,
   userShellStarted,
-  SHELL_APPROVAL_BACKGROUND_MS,
 } from '../src/electron/approvalConfirm.js';
 
 describe('approval sonar issue #12', () => {
-  it('card visible → sonar', () => {
+  it('card visible y sin proceso → sonar (#8/#16)', () => {
     expect(
-      approvalSonarDecision({ ageMs: 2000, uiVisible: true, commandRunning: false }),
+      approvalSonarDecision({ ageMs: 8000, uiVisible: true, commandRunning: false }),
     ).toBe('speak');
+  });
+
+  it('card visible pero el comando ya corre → silencio (#16)', () => {
+    expect(
+      approvalSonarDecision({ ageMs: 8000, uiVisible: true, commandRunning: true }),
+    ).toBe('suppress');
   });
 
   it('auto-run con proceso → no sonar (#8)', () => {
@@ -21,14 +26,10 @@ describe('approval sonar issue #12', () => {
     ).toBe('suppress');
   });
 
-  it('sin card y sin proceso, tras espera → sonar (#12)', () => {
+  it('sin card, comando ya terminado → nunca sonar (#16)', () => {
     expect(
-      approvalSonarDecision({
-        ageMs: SHELL_APPROVAL_BACKGROUND_MS,
-        uiVisible: false,
-        commandRunning: false,
-      }),
-    ).toBe('speak');
+      approvalSonarDecision({ ageMs: 8000, uiVisible: false, commandRunning: false }),
+    ).toBe('wait');
   });
 
   it('sin card todavía dentro de la espera → esperar', () => {

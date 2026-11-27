@@ -388,9 +388,16 @@ export function composeChats(
       const ticketOpen = uiTitles.some((t) => isTicketTab(t));
       const boilerplateClaims =
         isPlanBoilerplate(prompt) && (focusIsTicket || !ticketOpen);
-      let allow =
-        !!pick &&
-        (!holderOk && (!!holder || boilerplateClaims || uiTitles.length === 1));
+      const pickMatches =
+        prompt === focusClave ||
+        fuzzyTitleMatch(prompt, uiTitles[focusIdx]!) ||
+        (isPlanBoilerplate(prompt) && focusIsTicket);
+      const holderStickyHere = !!holder && holderSticky === focusClave;
+      let allow = false;
+      if (pick && !holderOk && pick.id !== holder?.id) {
+        if (holderStickyHere) allow = pickMatches;
+        else allow = pickMatches || boilerplateClaims || uiTitles.length === 1;
+      }
       // Mención «ticket 4220» no retiene el tab si el build del plan está suelto.
       const planBuilds = rawAgents.filter((a) => {
         if (!ACTIVE.has(String(a.state))) return false;

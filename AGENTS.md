@@ -1,12 +1,10 @@
 # AGENTS
 
-Proyecto **AgentCrew** (panel de agentes Cursor). Antes de implementar, lee:
+Proyecto **AgentCrew** (panel de agentes Cursor). Antes de implementar, lee solo [docs/00-resumen.md](./docs/00-resumen.md).
 
-1. [docs/estado.md](./docs/estado.md)
-2. [docs/README.md](./docs/README.md)
-3. [docs/11-contexto-agentes.md](./docs/11-contexto-agentes.md)
+`estado.md`, `README.md`, `11-contexto-agentes.md` y el resto de `docs/` se abren solo si el resumen no basta. Dominio y archivos de estado, si hace falta ampliar: `docs/04-dominio.md` y `docs/05-contrato-estado.md`.
 
-Responde en español. Caveman activo. No inventes estados ni contrato de archivos: usa `docs/04-dominio.md` y `docs/05-contrato-estado.md`.
+Responde en español. Caveman activo.
 
 ## Stack objetivo
 

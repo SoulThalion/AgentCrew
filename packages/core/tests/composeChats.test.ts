@@ -344,6 +344,25 @@ describe('composeChats', () => {
     expect(list.find((a) => a.title.includes('Ticket 4220'))?.id).not.toBe('report');
   });
 
+  it('issue #15: huérfano ajeno no roba el Ticket con sticky', () => {
+    writeEstado(dir, 'ticket', 'trabajando');
+    writeTitulo(dir, 'ticket', 'Ticket 4220 migration plan');
+    writePrompt(dir, 'ticket', 'Build Error Failed to compile the migration screen');
+    writeEstado(dir, 'here', 'esperando');
+    writePrompt(dir, 'here', 'AgentCrew repository installation sigue con el sprite cruzado');
+    const list = composeChats(dir, {
+      uiTitles: [
+        'Codebase Memory MCP usage, anclado',
+        'AgentCrew repository installation',
+        'Ticket 4220 migration plan',
+      ],
+      focusedTitles: ['Ticket 4220 migration plan'],
+    });
+    expect(list.find((a) => a.title.includes('Ticket 4220'))?.id).toBe('ticket');
+    expect(list.filter((a) => a.id === 'ticket')).toHaveLength(1);
+    expect(list.find((a) => a.title.includes('AgentCrew'))?.id).toBe('here');
+  });
+
   it('issue #14: plan-build no roba el focused ajeno', () => {
     writeEstado(dir, 'here', 'esperando');
     writePrompt(dir, 'here', 'AgentCrew repository installation sigue con sprites cruzados');

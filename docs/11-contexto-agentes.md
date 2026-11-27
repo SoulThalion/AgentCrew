@@ -1,6 +1,6 @@
 # Contexto para agentes / chats nuevos
 
-Leer también `docs/README.md` y `docs/estado.md`.
+La lectura obligatoria es [00-resumen.md](./00-resumen.md). Este archivo y el resto solo para ampliar.
 
 ## Qué es este repo
 
@@ -27,12 +27,12 @@ Leer también `docs/README.md` y `docs/estado.md`.
 3. Estados/archivos → `04-dominio.md` / `05-contrato-estado.md` (no inventar)
 4. Skills: lean-build / surgical-patch / electron-* / react-vite según capa
 5. No ampliar PowerShell salvo hotfix temporal documentado
-6. Bug o issue → invariantes del mismo eje en [17-regresiones-issues.md](./17-regresiones-issues.md)
+6. Bug o issue → invariantes del mismo eje en [00-resumen.md](./00-resumen.md)
 
 ## Prompt corto para chat nuevo
 
 ```
-Continúa AgentCrew (panel de agentes Cursor). Lee docs/README.md y docs/estado.md.
+Continúa AgentCrew (panel de agentes Cursor). Lee docs/00-resumen.md.
 Objetivo: [Fase 1 core | hooks Node | Electron UI | dock Win | …].
 Stack: Electron+React+TS monorepo. Legacy PowerShell solo referencia (docs/02-legacy-powershell.md).
 Responde en español. Caveman + QA gate.

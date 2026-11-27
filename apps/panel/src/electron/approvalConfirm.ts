@@ -1,12 +1,11 @@
 /**
- * #8: auto-run largo deja shell+aprobacion vivos sin card → no sonar.
- * #12: sin card y sin ningún shell nuevo, tras la espera, es aprobación.
- * #13: un powershell/cmd nuevo cuenta como auto-run aunque el texto no coincida.
+ * #8: card visible y sin proceso → sonar.
+ * #13: powershell/cmd nuevo → silencio, aunque la card salga en otra ventana.
+ * #16: sin card no hay sonar por espera; el auto-run corto ya terminado tampoco.
  */
 import { execFile } from 'node:child_process';
 
 export const SHELL_APPROVAL_GRACE_MS = 1500;
-export const SHELL_APPROVAL_BACKGROUND_MS = 4000;
 
 export type ApprovalSonar = 'speak' | 'wait' | 'suppress';
 
@@ -17,9 +16,6 @@ export function approvalSonarDecision(opts: {
 }): ApprovalSonar {
   if (opts.commandRunning === true) return 'suppress';
   if (opts.uiVisible) return 'speak';
-  if (opts.commandRunning === false && opts.ageMs >= SHELL_APPROVAL_BACKGROUND_MS) {
-    return 'speak';
-  }
   return 'wait';
 }
 

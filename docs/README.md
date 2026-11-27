@@ -6,7 +6,8 @@ Panel de agentes Cursor (migración desde un panel PowerShell/WPF). Repo: este d
 
 | # | Documento | Para qué |
 |---|-----------|----------|
-| 0 | [estado.md](./estado.md) | Qué está hecho / pendiente ahora |
+| 0 | [00-resumen.md](./00-resumen.md) | Lectura única: qué es, invariantes de issues, cuándo abrir el resto |
+| 0b | [estado.md](./estado.md) | Qué está hecho / pendiente ahora |
 | 1 | [01-vision.md](./01-vision.md) | Qué es el producto y para quién |
 | 2 | [02-legacy-powershell.md](./02-legacy-powershell.md) | Origen PowerShell / WPF a migrar |
 | 3 | [03-decisiones.md](./03-decisiones.md) | Decisiones (stack, dock, IPC) |
@@ -21,7 +22,7 @@ Panel de agentes Cursor (migración desde un panel PowerShell/WPF). Repo: este d
 | 12 | [12-tts-proveedores.md](./12-tts-proveedores.md) | Fish + ElevenLabs, Settings, keys |
 | 15 | [15-cursor-watch.md](./15-cursor-watch.md) | Abrir/cerrar panel con el IDE Cursor |
 | 16 | [16-plan-cast.md](./16-plan-cast.md) | Cast → Google Home / Nest (opcional) |
-| 17 | [17-regresiones-issues.md](./17-regresiones-issues.md) | Invariantes de issues; no deshacer el eje al arreglar otro |
+| 17 | [17-regresiones-issues.md](./17-regresiones-issues.md) | Redirige al resumen; no se mantiene |
 
 Raíz: [AGENTS.md](../AGENTS.md). Rules/skills: `.cursor/rules/`, `.agents/skills/`.
 
