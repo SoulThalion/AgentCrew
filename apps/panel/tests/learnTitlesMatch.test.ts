@@ -108,6 +108,32 @@ describe('matchAndSaveTitles issue #5', () => {
     expect(readTitulo(dir, 'ticket').trim()).toBe('Ticket 4220 migration plan');
   });
 
+  it('issue #11: plan build toma el tab aunque otro prompt mencione el ticket', () => {
+    writeEstado(dir, 'report', 'esperando');
+    writeTitulo(dir, 'report', 'Ticket 4220 migration plan');
+    writePrompt(
+      dir,
+      'report',
+      'sigue pasando lo mismo con el chat de ticket 4220, el sprite no cambia',
+    );
+    writeEstado(dir, 'plan', 'trabajando');
+    writePrompt(
+      dir,
+      'plan',
+      'Implement the plan as specified, it is attached for your reference',
+    );
+    const tabs = [
+      'Codebase Memory MCP usage, anclado',
+      'AgentCrew repository installation',
+      '*Ticket 4220 migration plan',
+    ];
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'plan').trim()).toBe('Ticket 4220 migration plan');
+    expect(readTitulo(dir, 'report').trim()).not.toBe('Ticket 4220 migration plan');
+    matchAndSaveTitles(dir, tabs);
+    expect(readTitulo(dir, 'plan').trim()).toBe('Ticket 4220 migration plan');
+  });
+
   it('issue #11: Implement the plan no suelta el sticky del tab focused', () => {
     const prompt = 'Implement the plan as specified, it is attached for your reference';
     writeEstado(dir, 'ticket', 'planificando');

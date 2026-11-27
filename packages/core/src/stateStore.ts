@@ -207,9 +207,16 @@ export function clearBusqueda(stateDir: string, id: string): void {
   removeFile(fileBusqueda(stateDir, id));
 }
 
-export function markShell(stateDir: string, id: string, at: Date = new Date()): void {
+export function markShell(
+  stateDir: string,
+  id: string,
+  at: Date = new Date(),
+  command?: string,
+): void {
   ensureStateDir(stateDir);
-  writeAtomic(fileShell(stateDir, id), at.toISOString(), 'utf8');
+  const cmd = (command ?? '').replace(/\s+/g, ' ').trim().slice(0, 240);
+  const body = cmd ? `${at.toISOString()}\n${cmd}` : at.toISOString();
+  writeAtomic(fileShell(stateDir, id), body, 'utf8');
 }
 
 export function clearShell(stateDir: string, id: string): void {

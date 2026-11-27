@@ -307,7 +307,7 @@ describe('handleEvent', () => {
     expect(fs.readFileSync(path.join(dir, 'estado-sh1.txt'), 'utf8').startsWith('esperando|')).toBe(
       true,
     );
-    expect(fs.existsSync(path.join(dir, 'shell-sh1.txt'))).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'shell-sh1.txt'), 'utf8')).toContain('npm test');
     expect(fs.existsSync(path.join(dir, 'aprobacion-sh1.txt'))).toBe(true);
     expect(fs.existsSync(path.join(dir, 'aprobacion-said-sh1.txt'))).toBe(false);
     expect(fs.existsSync(path.join(dir, 'sonar-sh1.txt'))).toBe(false);

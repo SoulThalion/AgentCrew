@@ -14,13 +14,29 @@ $run = $false; $skipOrReject = $false
 $btn = [System.Windows.Automation.ControlType]::Button
 $cond = New-Object System.Windows.Automation.PropertyCondition(
   [System.Windows.Automation.AutomationElement]::ControlTypeProperty, $btn)
+$roots = New-Object System.Collections.Generic.List[System.Windows.Automation.AutomationElement]
 foreach ($p in $pids) {
   try {
     $proc = Get-Process -Id $p -ErrorAction Stop
     $h = $proc.MainWindowHandle
     if ($h -eq [IntPtr]::Zero) { continue }
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($h)
-    if (-not $root) { continue }
+    if ($root) { $roots.Add($root) }
+  } catch { }
+}
+try {
+  $winCond = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Window)
+  foreach ($win in [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Children, $winCond)) {
+    $wp = 0
+    try { $wp = $win.Current.ProcessId } catch { continue }
+    if ($pids -contains $wp) { $roots.Add($win) }
+  }
+} catch { }
+foreach ($root in $roots) {
+  try {
     foreach ($el in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)) {
       $n = ''
       try { $n = $el.Current.Name } catch { continue }

@@ -334,15 +334,25 @@ export function composeChats(
       const untitled = needy.filter(
         (a) => normalizeTitle(readTitulo(stateDir, a.id)) !== focusClave,
       );
-      const pick =
+      let pick =
         untitled.length === 1 ? untitled[0] : needy.length === 1 ? needy[0] : null;
       const prompt = pick ? readPromptNorm(stateDir, pick.id) : '';
-      const allow =
+      let allow =
         !!pick &&
         (!holderOk &&
           (!!holder ||
             isPlanBoilerplate(prompt) ||
             uiTitles.length === 1));
+      // Mención «ticket 4220» no retiene el tab si el build del plan está suelto.
+      const planBuilds = rawAgents.filter((a) => {
+        if (!ACTIVE.has(String(a.state))) return false;
+        if (!isPlanBoilerplate(readPromptNorm(stateDir, a.id))) return false;
+        return normalizeTitle(readTitulo(stateDir, a.id)) !== focusClave;
+      });
+      if (planBuilds.length === 1 && planBuilds[0]!.id !== holder?.id) {
+        pick = planBuilds[0]!;
+        allow = true;
+      }
       if (allow && pick) {
         if (holder && holder.id !== pick.id) used.delete(holder.id);
         for (const [idx, agent] of assigned) {
@@ -468,14 +478,22 @@ export function resolveFocusedIds(
   for (const ft of focusedTitles) {
     const fn = normalizeTitle(ft);
     if (!fn) continue;
-    const hits = agents.filter((a) => {
-      const tit = normalizeTitle(readTitulo(stateDir, a.id) || a.title);
-      const prompt = readPromptNorm(stateDir, a.id);
-      return (
-        (tit && tit === fn) ||
-        (prompt && (prompt === fn || prompt.startsWith(fn) || fn.startsWith(prompt)))
-      );
-    });
+    const fileHits = agents.filter(
+      (a) => normalizeTitle(readTitulo(stateDir, a.id)) === fn,
+    );
+    // a.title puede seguir el sticky ya borrado; no usarlo si hay titulo en disco.
+    const hits =
+      fileHits.length > 0
+        ? fileHits
+        : agents.filter((a) => {
+            const prompt = readPromptNorm(stateDir, a.id);
+            const stale = normalizeTitle(a.title);
+            return (
+              (prompt &&
+                (prompt === fn || prompt.startsWith(fn) || fn.startsWith(prompt))) ||
+              stale === fn
+            );
+          });
     const pick =
       hits.find((a) => ACTIVE.has(String(a.state))) ??
       (hits.length === 1 ? hits[0] : undefined);

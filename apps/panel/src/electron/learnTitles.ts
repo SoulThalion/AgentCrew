@@ -388,10 +388,11 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
       !blocksOwner;
     const shortFu = isShortFollowUp(c.promptN, c.tituloN);
     if (
-      otherHits.length === 1 ||
-      blocksOwner ||
-      otherTicket ||
-      (!matchesOwn && !shortFu && !keepBoilerplate && !keepFocus)
+      !keepBoilerplate &&
+      (otherHits.length === 1 ||
+        blocksOwner ||
+        otherTicket ||
+        (!matchesOwn && !shortFu && !keepFocus))
     ) {
       clearTitulo(stateDir, c.id);
       c.tituloN = '';
@@ -508,11 +509,21 @@ export function matchAndSaveTitles(stateDir: string, uiRaw: string[]): number {
       return !ownsFocus;
     });
     const untitled = needy.filter((c) => c.tituloN !== focusN);
-    const pick = untitled.length === 1 ? untitled[0] : needy.length === 1 ? needy[0] : null;
-    const allow =
+    let pick = untitled.length === 1 ? untitled[0] : needy.length === 1 ? needy[0] : null;
+    let allow =
       !!pick &&
       !holderOk &&
       (!!holder || isPlanBoilerplate(pick.promptN) || uiTitles.length === 1);
+    const planBuilds = cands.filter((c) => {
+      const ag = agents.find((x) => x.id === c.id);
+      if (!ag || !ACTIVE.has(String(ag.state))) return false;
+      if (!isPlanBoilerplate(c.promptN)) return false;
+      return c.tituloN !== focusN;
+    });
+    if (planBuilds.length === 1 && planBuilds[0]!.id !== holder?.id) {
+      pick = planBuilds[0]!;
+      allow = true;
+    }
     if (allow && pick) {
       if (holder && holder.id !== pick.id) {
         clearTitulo(stateDir, holder.id);

@@ -317,6 +317,33 @@ describe('composeChats', () => {
     expect(list.filter((a) => a.id === 'ticket')).toHaveLength(1);
   });
 
+  it('issue #11: mención ticket no retiene el tab frente al plan build', () => {
+    writeEstado(dir, 'report', 'esperando');
+    writeTitulo(dir, 'report', 'Ticket 4220 migration plan');
+    writePrompt(
+      dir,
+      'report',
+      'sigue pasando lo mismo con el chat de ticket 4220, el sprite no cambia',
+    );
+    writeEstado(dir, 'plan', 'trabajando');
+    writePrompt(
+      dir,
+      'plan',
+      'Implement the plan as specified, it is attached for your reference',
+    );
+    const list = composeChats(dir, {
+      uiTitles: [
+        'Codebase Memory MCP usage, anclado',
+        'AgentCrew repository installation',
+        'Ticket 4220 migration plan',
+      ],
+      focusedTitles: ['Ticket 4220 migration plan'],
+    });
+    expect(list.find((a) => a.title.includes('Ticket 4220'))?.id).toBe('plan');
+    expect(list.filter((a) => a.id === 'plan')).toHaveLength(1);
+    expect(list.find((a) => a.title.includes('Ticket 4220'))?.id).not.toBe('report');
+  });
+
   it('issue #11: boilerplate conserva el sticky del tab focused', () => {
     writeEstado(dir, 'ticket', 'planificando');
     writeTitulo(dir, 'ticket', 'Ticket 4220 migration plan');
